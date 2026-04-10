@@ -28,37 +28,6 @@ export interface CustomerRevenueSummary {
   sale_count:    number;
 }
 
-// ─── ダミーデータ（全顧客分）──────────────────────────
-// 今日 = 2026-03-30 想定
-export const DUMMY_SALES: Sale[] = [
-  // ── 山田花子 (id:1) VIP・完全逆転購入済 ──────────────
-  { id:  1, customer_id: 1, customer_name: "山田花子", product_id: "full_reversal",   amount: 19800, paid: true,  date: "2026-03-28" },
-  { id:  2, customer_id: 1, customer_name: "山田花子", product_id: "paid_divination", amount: 15000, paid: true,  date: "2026-03-10" },
-  { id:  3, customer_id: 1, customer_name: "山田花子", product_id: "paid_divination", amount:  9800, paid: true,  date: "2026-02-20" },
-  { id:  4, customer_id: 1, customer_name: "山田花子", product_id: "destiny_fix",     amount: 15000, paid: true,  date: "2026-02-05" },
-  { id:  5, customer_id: 1, customer_name: "山田花子", product_id: "paid_divination", amount: 15000, paid: true,  date: "2026-01-20" },
-
-  // ── 佐藤美咲 (id:2) 有料鑑定購入済 ──────────────────
-  { id:  6, customer_id: 2, customer_name: "佐藤美咲", product_id: "destiny_fix",     amount: 15000, paid: true,  date: "2026-03-20" },
-  { id:  7, customer_id: 2, customer_name: "佐藤美咲", product_id: "paid_divination", amount:  9800, paid: true,  date: "2026-03-01" },
-  { id:  8, customer_id: 2, customer_name: "佐藤美咲", product_id: "paid_divination", amount:  9800, paid: true,  date: "2026-02-10" },
-
-  // ── 鈴木あい (id:3) 無料鑑定送信済 ──────────────────
-  { id:  9, customer_id: 3, customer_name: "鈴木あい", product_id: "paid_divination", amount:  9800, paid: true,  date: "2026-03-29" },
-
-  // ── 田中ゆき (id:4) 運命修正提案済 ──────────────────
-  { id: 10, customer_id: 4, customer_name: "田中ゆき", product_id: "reversal_action", amount: 25000, paid: true,  date: "2026-03-25" },
-  { id: 11, customer_id: 4, customer_name: "田中ゆき", product_id: "destiny_fix",     amount: 18000, paid: true,  date: "2026-03-05" },
-  { id: 12, customer_id: 4, customer_name: "田中ゆき", product_id: "paid_divination", amount: 15000, paid: true,  date: "2026-02-15" },
-
-  // ── 伊藤なな (id:5) 深層誘導済 ──────────────────────
-  { id: 13, customer_id: 5, customer_name: "伊藤なな", product_id: "paid_divination", amount:  9800, paid: true,  date: "2026-03-15" },
-  { id: 14, customer_id: 5, customer_name: "伊藤なな", product_id: "deep_psychology", amount: 30000, paid: false, date: "2026-03-28", note: "振込確認中" },
-
-  // ── 高橋りん (id:6) 休眠 ────────────────────────────
-  { id: 15, customer_id: 6, customer_name: "高橋りん", product_id: "paid_divination", amount:  9800, paid: true,  date: "2026-02-10" },
-];
-
 // ─── 集計ヘルパー ────────────────────────────────────
 
 /** 支払済み売上合計 */

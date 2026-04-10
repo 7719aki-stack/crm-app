@@ -9,7 +9,7 @@ import {
   type CustomerDetail,
   type ActionEntry,
 } from "@/app/customers/dummyData";
-import { DUMMY_SALES, type Sale } from "@/lib/sales";
+import type { Sale } from "@/lib/sales";
 import type { StatusId } from "@/lib/statuses";
 
 // ─── インターフェース ─────────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ const localCustomerRepo: CustomerRepository = {
 
 const localSalesRepo: SalesRepository = {
   getAll() {
-    return lsRead<Sale[]>(LS.sales) ?? DUMMY_SALES;
+    return lsRead<Sale[]>(LS.sales) ?? [];
   },
 };
 

@@ -1,43 +1,15 @@
-// ダッシュボード（DUMMY_CUSTOMERS / DUMMY_SALES から集計）
-// 次フェーズで API 取得に差し替え
+// ダッシュボード（DB実データ）
+export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { DUMMY_CUSTOMERS, type CustomerRow, type CrisisLevel } from "@/app/customers/dummyData";
-import { DUMMY_SALES, getThisMonthSales, getTotalRevenue } from "@/lib/sales";
+import { sql } from "@/lib/db";
 import { getStatus } from "@/lib/statuses";
 import { getProduct } from "@/lib/products";
+import type { ProductId } from "@/lib/products";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import type { CustomerRow, CrisisLevel } from "@/app/customers/dummyData";
 
-// ─── 集計 ─────────────────────────────────────────────
-const today = new Date();
-today.setHours(0, 0, 0, 0);
-const tomorrow = new Date(today.getTime() + 86_400_000);
-
-const leadCount      = DUMMY_CUSTOMERS.filter((c) => getStatus(c.status)?.group === "lead").length;
-const divinationCount = DUMMY_CUSTOMERS.filter((c) => getStatus(c.status)?.group === "divination").length;
-const preConvertCount = DUMMY_CUSTOMERS.filter((c) => c.status === "deep_guided").length;
-const purchasedCount  = DUMMY_CUSTOMERS.filter(
-  (c) => c.status === "paid_purchased" || getStatus(c.status)?.group === "upsell"
-).length;
-const monthRevenue   = getTotalRevenue(getThisMonthSales(DUMMY_SALES));
-
-// ─── 優先対応顧客（危機度4以上 OR 次回アクション今日・超過）──
-const priorityCustomers: CustomerRow[] = DUMMY_CUSTOMERS
-  .filter((c) => {
-    if (getStatus(c.status)?.group === "exit") return false;
-    const overdue  = c.next_action && new Date(c.next_action) <= tomorrow;
-    const highRisk = c.crisis_level >= 4;
-    return overdue || highRisk;
-  })
-  .sort((a, b) => {
-    const aOverdue = a.next_action && new Date(a.next_action) < today;
-    const bOverdue = b.next_action && new Date(b.next_action) < today;
-    if (aOverdue && !bOverdue) return -1;
-    if (!aOverdue && bOverdue) return  1;
-    return b.crisis_level - a.crisis_level;
-  });
-
-// ─── ファネル分布（グループ別顧客数）────────────────────
+// ─── ファネル分布グループ定義（設定値） ──────────────────
 const funnelGroups = [
   { group: "lead",       label: "リード段階",   dotCls: "bg-blue-400" },
   { group: "divination", label: "鑑定段階",     dotCls: "bg-cyan-500" },
@@ -45,17 +17,6 @@ const funnelGroups = [
   { group: "upsell",     label: "アップセル",   dotCls: "bg-violet-500" },
   { group: "exit",       label: "離脱",         dotCls: "bg-gray-400" },
 ] as const;
-const funnelData = funnelGroups.map(({ group, label, dotCls }) => ({
-  label,
-  dotCls,
-  count: DUMMY_CUSTOMERS.filter((c) => getStatus(c.status)?.group === group).length,
-}));
-const maxFunnelCount = Math.max(...funnelData.map((f) => f.count), 1);
-
-// ─── 最近の購入（上位5件）────────────────────────────────
-const recentSales = [...DUMMY_SALES]
-  .sort((a, b) => b.date.localeCompare(a.date))
-  .slice(0, 5);
 
 // ─── 危機度ドット（ミニサイズ）────────────────────────────
 const CRISIS_DOT_CLS: Record<CrisisLevel, string> = {
@@ -77,6 +38,8 @@ function MiniCrisis({ level }: { level: CrisisLevel }) {
 
 // ─── 次回アクション表示 ───────────────────────────────────
 function ActionLabel({ date }: { date: string | null }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   if (!date) return <span className="text-xs text-gray-300">未設定</span>;
   const d = new Date(date);
   const diff = Math.ceil((d.getTime() - today.getTime()) / 86_400_000);
@@ -86,8 +49,145 @@ function ActionLabel({ date }: { date: string | null }) {
   return <span className="text-xs text-gray-500">{date}</span>;
 }
 
-// ─── ページ本体 ───────────────────────────────────────────
-export default function DashboardPage() {
+// ─── ページ本体（async Server Component）─────────────────
+export default async function DashboardPage() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today.getTime() + 86_400_000);
+
+  // ── 初期値（DB失敗時のフォールバック）──────────────────
+  let customers: CustomerRow[] = [];
+  let monthRevenue    = 0;
+  let monthPaidCount  = 0;
+  let recentSales: {
+    id: number;
+    customer_name: string;
+    type: string;
+    amount: number;
+    paid: number;
+    date: string;
+  }[] = [];
+
+  try {
+    // 顧客一覧
+    const rows = await sql<{
+      id:           number;
+      name:         string;
+      display_name: string;
+      category:     string;
+      status:       string;
+      tags:         string;
+      crisis_level: number;
+      temperature:  string;
+      next_action:  string | null;
+      total_amount: number;
+      last_contact: string;
+    }[]>`
+      SELECT
+        c.id,
+        c.name,
+        COALESCE(c.display_name, c.name) AS display_name,
+        c.category,
+        c.status,
+        c.tags,
+        c.crisis_level,
+        c.temperature,
+        c.next_action,
+        c.total_amount,
+        COALESCE(
+          (SELECT DATE(m.created_at)
+           FROM messages m
+           WHERE m.customer_id = c.id
+           ORDER BY m.created_at DESC
+           LIMIT 1),
+          DATE(c.updated_at)
+        ) AS last_contact
+      FROM customers c
+      ORDER BY last_contact DESC
+    `;
+
+    customers = rows.map((r) => ({
+      id:           r.id,
+      name:         r.name,
+      display_name: r.display_name ?? r.name,
+      category:     (r.category as CustomerRow["category"]) ?? "片思い",
+      status:       (r.status   as CustomerRow["status"])   ?? "new_reg",
+      tags:         (() => { try { return JSON.parse(r.tags || "[]"); } catch { return []; } })() as string[],
+      crisis_level: (Math.min(5, Math.max(1, r.crisis_level ?? 1))) as CrisisLevel,
+      temperature:  (r.temperature as CustomerRow["temperature"]) ?? "cool",
+      last_contact: r.last_contact ?? "",
+      next_action:  r.next_action ?? null,
+      total_amount: r.total_amount ?? 0,
+    }));
+
+    // 今月売上（appraisals から集計）
+    const [revRow] = await sql<{ month_revenue: string; paid_count: string }[]>`
+      SELECT
+        COALESCE(SUM(CASE WHEN paid = 1 THEN price ELSE 0 END), 0) AS month_revenue,
+        COUNT(*) FILTER (WHERE paid = 1)                            AS paid_count
+      FROM appraisals
+      WHERE created_at >= DATE_TRUNC('month', NOW())
+        AND created_at <  DATE_TRUNC('month', NOW()) + INTERVAL '1 month'
+    `;
+    monthRevenue   = Number(revRow?.month_revenue ?? 0);
+    monthPaidCount = Number(revRow?.paid_count    ?? 0);
+
+    // 最近の購入（直近5件）
+    recentSales = await sql<{
+      id:            number;
+      customer_name: string;
+      type:          string;
+      amount:        number;
+      paid:          number;
+      date:          string;
+    }[]>`
+      SELECT
+        a.id,
+        c.name         AS customer_name,
+        a.type,
+        a.price        AS amount,
+        a.paid,
+        DATE(a.created_at) AS date
+      FROM appraisals a
+      JOIN customers c ON c.id = a.customer_id
+      ORDER BY a.created_at DESC
+      LIMIT 5
+    `;
+  } catch (e) {
+    console.error("[DashboardPage] DB error:", e);
+  }
+
+  // ─── 集計 ─────────────────────────────────────────────
+  const leadCount       = customers.filter((c) => getStatus(c.status)?.group === "lead").length;
+  const divinationCount = customers.filter((c) => getStatus(c.status)?.group === "divination").length;
+  const preConvertCount = customers.filter((c) => c.status === "deep_guided").length;
+  const purchasedCount  = customers.filter(
+    (c) => c.status === "paid_purchased" || getStatus(c.status)?.group === "upsell"
+  ).length;
+
+  const priorityCustomers: CustomerRow[] = customers
+    .filter((c) => {
+      if (getStatus(c.status)?.group === "exit") return false;
+      const overdue  = c.next_action && new Date(c.next_action) <= tomorrow;
+      const highRisk = c.crisis_level >= 4;
+      return overdue || highRisk;
+    })
+    .sort((a, b) => {
+      const aOverdue = a.next_action && new Date(a.next_action) < today;
+      const bOverdue = b.next_action && new Date(b.next_action) < today;
+      if (aOverdue && !bOverdue) return -1;
+      if (!aOverdue && bOverdue) return  1;
+      return b.crisis_level - a.crisis_level;
+    });
+
+  const funnelData = funnelGroups.map(({ group, label, dotCls }) => ({
+    label,
+    dotCls,
+    count: customers.filter((c) => getStatus(c.status)?.group === group).length,
+  }));
+  const maxFunnelCount = Math.max(...funnelData.map((f) => f.count), 1);
+
+  // ─── ページ本体 ───────────────────────────────────────────
   return (
     <div className="space-y-5">
 
@@ -148,7 +248,7 @@ export default function DashboardPage() {
           },
           {
             label: "今月売上",
-            sublabel: `支払済み ${getThisMonthSales(DUMMY_SALES).filter((s) => s.paid).length}件`,
+            sublabel: `支払済み ${monthPaidCount}件`,
             value: null,
             valueStr: `¥${monthRevenue.toLocaleString()}`,
             unit: "",
@@ -202,7 +302,7 @@ export default function DashboardPage() {
               >
                 {/* アバター */}
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-200 to-pink-200 flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-brand-700">{c.name[0]}</span>
+                  <span className="text-xs font-bold text-brand-700">{(c.name || "?")[0]}</span>
                 </div>
 
                 {/* 名前 */}
@@ -265,7 +365,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             ))}
-            <p className="text-[11px] text-gray-300 pt-1">全 {DUMMY_CUSTOMERS.length} 名</p>
+            <p className="text-[11px] text-gray-300 pt-1">全 {customers.length} 名</p>
           </div>
         </div>
 
@@ -275,39 +375,47 @@ export default function DashboardPage() {
             <h3 className="text-sm font-semibold text-gray-800">最近の購入</h3>
             <Link href="/sales" className="text-xs text-brand-600 hover:underline">すべて見る</Link>
           </div>
-          <div className="divide-y divide-gray-50">
-            {recentSales.map((s) => {
-              const product = getProduct(s.product_id);
-              return (
-                <div key={s.id} className="flex items-center gap-3 px-5 py-3">
-                  {/* 顧客アバター */}
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-brand-200 to-pink-200 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[10px] font-bold text-brand-700">{s.customer_name[0]}</span>
-                  </div>
-                  <span className="text-sm text-gray-700 w-20 flex-shrink-0 truncate">{s.customer_name}</span>
+          {recentSales.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <p className="text-sm text-gray-300">購入データなし</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {recentSales.map((s) => {
+                const product = getProduct(s.type as ProductId);
+                return (
+                  <div key={s.id} className="flex items-center gap-3 px-5 py-3">
+                    {/* 顧客アバター */}
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-brand-200 to-pink-200 flex items-center justify-center flex-shrink-0">
+                      <span className="text-[10px] font-bold text-brand-700">{(s.customer_name || "?")[0]}</span>
+                    </div>
+                    <span className="text-sm text-gray-700 w-20 flex-shrink-0 truncate">{s.customer_name}</span>
 
-                  {/* 商品バッジ */}
-                  {product && (
-                    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${product.badgeClass}`}>
-                      <span className={`w-1 h-1 rounded-full ${product.dotClass}`} />
-                      {product.label}
+                    {/* 商品バッジ（type が ProductId に一致する場合のみ表示） */}
+                    {product ? (
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${product.badgeClass}`}>
+                        <span className={`w-1 h-1 rounded-full ${product.dotClass}`} />
+                        {product.label}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-gray-400 flex-shrink-0 truncate max-w-[80px]">{s.type}</span>
+                    )}
+
+                    <span className="flex-1" />
+
+                    {/* 金額・支払 */}
+                    <span className={`text-xs font-semibold flex-shrink-0 ${s.paid === 1 ? "text-gray-700" : "text-gray-300 line-through"}`}>
+                      ¥{s.amount.toLocaleString()}
                     </span>
-                  )}
-
-                  <span className="flex-1" />
-
-                  {/* 金額・支払 */}
-                  <span className={`text-xs font-semibold flex-shrink-0 ${s.paid ? "text-gray-700" : "text-gray-300 line-through"}`}>
-                    ¥{s.amount.toLocaleString()}
-                  </span>
-                  {!s.paid && (
-                    <span className="text-[10px] text-red-500 font-medium flex-shrink-0">未収</span>
-                  )}
-                  <span className="text-[10px] text-gray-400 flex-shrink-0">{s.date.slice(5)}</span>
-                </div>
-              );
-            })}
-          </div>
+                    {s.paid !== 1 && (
+                      <span className="text-[10px] text-red-500 font-medium flex-shrink-0">未収</span>
+                    )}
+                    <span className="text-[10px] text-gray-400 flex-shrink-0">{s.date.slice(5)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

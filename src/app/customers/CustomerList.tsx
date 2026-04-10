@@ -246,8 +246,14 @@ export function CustomerList() {
   useEffect(() => {
     // DB から顧客データを取得
     fetch("/api/customers")
-      .then((r) => r.json())
-      .then((data: CustomerRow[]) => setCustomers(data))
+      .then((r) => {
+        if (!r.ok) throw new Error(`API error: ${r.status}`);
+        return r.json();
+      })
+      .then((data: unknown) => {
+        if (Array.isArray(data)) setCustomers(data as CustomerRow[]);
+        else console.error("[CustomerList] unexpected response:", data);
+      })
       .catch(console.error);
     // タグマスタを読み込む
     setTagGroups(loadTagMaster());

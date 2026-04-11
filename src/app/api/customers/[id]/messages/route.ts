@@ -13,6 +13,42 @@ export interface DbMessage {
 
 type Params = { params: Promise<{ id: string }> };
 
+// ─── POST /api/customers/[id]/messages ────────────────────
+export async function POST(req: NextRequest, { params }: Params) {
+  const { id } = await params;
+  const customerId = Number(id);
+  if (isNaN(customerId)) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const text: string = typeof body.text === "string" ? body.text.trim() : "";
+  if (!text) {
+    return NextResponse.json({ error: "text is required" }, { status: 400 });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({
+        customer_id: customerId,
+        source:      "manual",
+        direction:   "outbound",
+        text,
+        created_at:  new Date().toISOString(),
+      })
+      .select("id, customer_id, source, direction, text, raw_type, created_at")
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json(data, { status: 201 });
+  } catch (e) {
+    console.error("[POST /api/customers/[id]/messages]", e);
+    return NextResponse.json({ error: "保存に失敗しました" }, { status: 500 });
+  }
+}
+
 // ─── GET /api/customers/[id]/messages ─────────────────────
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;

@@ -164,6 +164,9 @@ export default function CustomerDetailPage() {
   const [savingTags,      setSavingTags]      = useState(false);
   const [scenarioRefreshKey, setScenarioRefreshKey] = useState(0);
   const [lineMessage,     setLineMessageState] = useState("");
+  const [replyText,       setReplyText]       = useState("");
+  const [replySending,    setReplySending]    = useState(false);
+  const [replyError,      setReplyError]      = useState<string | null>(null);
 
   function setLineMessage(text: string) {
     setLineMessageState(text);
@@ -209,6 +212,29 @@ export default function CustomerDetailPage() {
       setLoading(false);
     });
   }, [customerId]);
+
+  // ── 返信送信 ─────────────────────────────────────────────
+  async function sendReply() {
+    const text = replyText.trim();
+    if (!text) return;
+    setReplySending(true);
+    setReplyError(null);
+    try {
+      const res = await fetch(`/api/customers/${customerId}/messages`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const saved: DbMessage = await res.json();
+      setDbMessages((prev) => [...prev, saved]);
+      setReplyText("");
+    } catch {
+      setReplyError("送信に失敗しました。もう一度お試しください。");
+    } finally {
+      setReplySending(false);
+    }
+  }
 
   // ── API 経由でタグを保存 ────────────────────────────────
   async function saveTags() {
@@ -410,6 +436,32 @@ export default function CustomerDetailPage() {
           {/* メッセージ履歴（DBから） */}
           <SectionCard title="メッセージ履歴">
             <LineMessageHistory messages={dbMessages} />
+            <div className="mt-4 space-y-2">
+              <textarea
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    sendReply();
+                  }
+                }}
+                rows={3}
+                placeholder="返信を入力… (Ctrl+Enter で送信)"
+                disabled={replySending}
+                className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent resize-none disabled:opacity-50"
+              />
+              {replyError && (
+                <p className="text-xs text-red-500 font-medium">{replyError}</p>
+              )}
+              <button
+                onClick={sendReply}
+                disabled={replySending || !replyText.trim()}
+                className="w-full py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors"
+              >
+                {replySending ? "送信中…" : "送信"}
+              </button>
+            </div>
           </SectionCard>
 
           {/* 受信メッセージ → キーワード自動判定（手動入力） */}

@@ -432,11 +432,11 @@ function CustomerTableRow({
       <td className="px-4 py-3.5">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-200 to-pink-200 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-bold text-brand-700">{c.name[0]}</span>
+            <span className="text-xs font-bold text-brand-700">{(c.display_name || c.name)[0]}</span>
           </div>
           <div>
-            <p className="font-semibold text-gray-900 text-[13px] leading-none">{c.name}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5 leading-none">{c.display_name}</p>
+            <p className="font-semibold text-gray-900 text-[13px] leading-none">{c.display_name || c.name}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5 leading-none">{c.name}</p>
           </div>
         </div>
       </td>

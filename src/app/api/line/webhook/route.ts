@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 
+async function fetchLineDisplayName(userId: string): Promise<string | null> {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  if (!token) return null;
+  try {
+    const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { displayName?: string };
+    return data.displayName ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   let body: unknown;
   try {
@@ -35,24 +50,33 @@ export async function POST(req: NextRequest) {
       // 既存顧客を検索
       const { data: existing } = await supabase
         .from("customers")
-        .select("id")
+        .select("id, display_name")
         .eq("line_user_id", line_user_id)
         .maybeSingle();
 
       let customerId: number | null = null;
 
       if (existing) {
-        // 既存顧客: updated_at のみ更新（name は保持）
+        // 既存顧客: display_name が空なら取得して更新
         customerId = existing.id;
-        await supabase
-          .from("customers")
-          .update({ updated_at: new Date().toISOString() })
-          .eq("id", existing.id);
+        if (!existing.display_name) {
+          const displayName = await fetchLineDisplayName(line_user_id);
+          await supabase
+            .from("customers")
+            .update({ updated_at: new Date().toISOString(), display_name: displayName ?? undefined })
+            .eq("id", existing.id);
+        } else {
+          await supabase
+            .from("customers")
+            .update({ updated_at: new Date().toISOString() })
+            .eq("id", existing.id);
+        }
       } else {
-        // 新規顧客: 作成（name は line_user_id を仮置き）
+        // 新規顧客: displayName を取得して保存
+        const displayName = await fetchLineDisplayName(line_user_id);
         const { data: created, error: insertError } = await supabase
           .from("customers")
-          .insert({ line_user_id, name: line_user_id })
+          .insert({ line_user_id, name: line_user_id, display_name: displayName ?? null })
           .select("id")
           .single();
 

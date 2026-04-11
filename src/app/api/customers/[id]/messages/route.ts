@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export interface DbMessage {
   id:          number;
@@ -22,15 +22,16 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 
   try {
-    const rows = await sql<DbMessage[]>`
-      SELECT id, customer_id, source, direction, text, raw_type, created_at
-      FROM messages
-      WHERE customer_id = ${customerId}
-      ORDER BY created_at DESC
-      LIMIT 200
-    `;
+    const { data: rows, error } = await supabase
+      .from("messages")
+      .select("id, customer_id, source, direction, text, raw_type, created_at")
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: false })
+      .limit(200);
 
-    return NextResponse.json(rows);
+    if (error) throw error;
+
+    return NextResponse.json(rows ?? []);
   } catch (e) {
     console.error("[GET /api/customers/[id]/messages]", e);
     return NextResponse.json({ error: "取得に失敗しました" }, { status: 500 });

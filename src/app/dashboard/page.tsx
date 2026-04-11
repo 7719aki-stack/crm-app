@@ -1,8 +1,8 @@
-// ダッシュボード（DB実データ）
+// ダッシュボード（Supabase実データ）
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { sql } from "@/lib/db";
+import { supabase } from "@/lib/db";
 import { getStatus } from "@/lib/statuses";
 import { getProduct } from "@/lib/products";
 import type { ProductId } from "@/lib/products";
@@ -70,43 +70,14 @@ export default async function DashboardPage() {
 
   try {
     // 顧客一覧
-    const rows = await sql<{
-      id:           number;
-      name:         string;
-      display_name: string;
-      category:     string;
-      status:       string;
-      tags:         string;
-      crisis_level: number;
-      temperature:  string;
-      next_action:  string | null;
-      total_amount: number;
-      last_contact: string;
-    }[]>`
-      SELECT
-        c.id,
-        c.name,
-        COALESCE(c.display_name, c.name) AS display_name,
-        c.category,
-        c.status,
-        c.tags,
-        c.crisis_level,
-        c.temperature,
-        c.next_action,
-        c.total_amount,
-        COALESCE(
-          (SELECT DATE(m.created_at)
-           FROM messages m
-           WHERE m.customer_id = c.id
-           ORDER BY m.created_at DESC
-           LIMIT 1),
-          DATE(c.updated_at)
-        ) AS last_contact
-      FROM customers c
-      ORDER BY last_contact DESC
-    `;
+    const { data: rows, error: custError } = await supabase
+      .from("customers")
+      .select("id, name, display_name, category, status, tags, crisis_level, temperature, next_action, total_amount, updated_at")
+      .order("updated_at", { ascending: false });
 
-    customers = rows.map((r) => ({
+    if (custError) throw custError;
+
+    customers = (rows ?? []).map((r) => ({
       id:           r.id,
       name:         r.name,
       display_name: r.display_name ?? r.name,
@@ -115,44 +86,41 @@ export default async function DashboardPage() {
       tags:         (() => { try { return JSON.parse(r.tags || "[]"); } catch { return []; } })() as string[],
       crisis_level: (Math.min(5, Math.max(1, r.crisis_level ?? 1))) as CrisisLevel,
       temperature:  (r.temperature as CustomerRow["temperature"]) ?? "cool",
-      last_contact: r.last_contact ?? "",
+      last_contact: r.updated_at ? String(r.updated_at).slice(0, 10) : "",
       next_action:  r.next_action ?? null,
       total_amount: r.total_amount ?? 0,
     }));
 
     // 今月売上（appraisals から集計）
-    const [revRow] = await sql<{ month_revenue: string; paid_count: string }[]>`
-      SELECT
-        COALESCE(SUM(CASE WHEN paid = 1 THEN price ELSE 0 END), 0) AS month_revenue,
-        COUNT(*) FILTER (WHERE paid = 1)                            AS paid_count
-      FROM appraisals
-      WHERE created_at >= DATE_TRUNC('month', NOW())
-        AND created_at <  DATE_TRUNC('month', NOW()) + INTERVAL '1 month'
-    `;
-    monthRevenue   = Number(revRow?.month_revenue ?? 0);
-    monthPaidCount = Number(revRow?.paid_count    ?? 0);
+    const now = new Date();
+    const monthStart   = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+
+    const { data: thisMonthAppraisals } = await supabase
+      .from("appraisals")
+      .select("price, paid")
+      .gte("created_at", monthStart)
+      .lt("created_at", nextMonthStart);
+
+    const paid = (thisMonthAppraisals ?? []).filter((a) => a.paid === 1);
+    monthRevenue   = paid.reduce((s, a) => s + (a.price ?? 0), 0);
+    monthPaidCount = paid.length;
 
     // 最近の購入（直近5件）
-    recentSales = await sql<{
-      id:            number;
-      customer_name: string;
-      type:          string;
-      amount:        number;
-      paid:          number;
-      date:          string;
-    }[]>`
-      SELECT
-        a.id,
-        c.name         AS customer_name,
-        a.type,
-        a.price        AS amount,
-        a.paid,
-        DATE(a.created_at) AS date
-      FROM appraisals a
-      JOIN customers c ON c.id = a.customer_id
-      ORDER BY a.created_at DESC
-      LIMIT 5
-    `;
+    const { data: salesData } = await supabase
+      .from("appraisals")
+      .select("id, type, price, paid, created_at, customers(name)")
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    recentSales = (salesData ?? []).map((a) => ({
+      id:            a.id,
+      customer_name: (a.customers as { name: string } | null)?.name ?? "不明",
+      type:          a.type,
+      amount:        a.price ?? 0,
+      paid:          a.paid,
+      date:          String(a.created_at).slice(0, 10),
+    }));
   } catch (e) {
     console.error("[DashboardPage] DB error:", e);
   }
@@ -391,7 +359,7 @@ export default async function DashboardPage() {
                     </div>
                     <span className="text-sm text-gray-700 w-20 flex-shrink-0 truncate">{s.customer_name}</span>
 
-                    {/* 商品バッジ（type が ProductId に一致する場合のみ表示） */}
+                    {/* 商品バッジ */}
                     {product ? (
                       <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${product.badgeClass}`}>
                         <span className={`w-1 h-1 rounded-full ${product.dotClass}`} />

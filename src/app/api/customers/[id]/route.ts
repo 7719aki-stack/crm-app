@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db";
+import { supabase } from "@/lib/db";
 import type { CustomerDetail } from "@/app/customers/dummyData";
 
 type Params = { params: Promise<{ id: string }> };
@@ -13,57 +13,44 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 
   try {
-    const [row] = await sql<{
-      id:             number;
-      name:           string;
-      display_name:   string | null;
-      contact:        string | null;
-      status:         string;
-      tags:           string;
-      notes:          string | null;
-      line_user_id:   string | null;
-      picture_url:    string | null;
-      status_message: string | null;
-      category:       string;
-      crisis_level:   number;
-      temperature:    string;
-      next_action:    string | null;
-      total_amount:   number;
-      last_contact:   string;
-    }[]>`
-      SELECT
-        c.*,
-        COALESCE(
-          (SELECT DATE(m.created_at)
-           FROM messages m
-           WHERE m.customer_id = c.id
-           ORDER BY m.created_at DESC
-           LIMIT 1),
-          DATE(c.updated_at)
-        ) AS last_contact
-      FROM customers c
-      WHERE c.id = ${customerId}
-    `;
+    const { data: row, error } = await supabase
+      .from("customers")
+      .select("*")
+      .eq("id", customerId)
+      .single();
 
-    if (!row) {
+    if (error || !row) {
       return NextResponse.json({ error: "顧客が見つかりません" }, { status: 404 });
     }
+
+    // last_contact: 最新メッセージ日 or updated_at
+    const { data: lastMsg } = await supabase
+      .from("messages")
+      .select("created_at")
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const lastContact = lastMsg?.created_at
+      ? String(lastMsg.created_at).slice(0, 10)
+      : String(row.updated_at).slice(0, 10);
 
     const customer: CustomerDetail = {
       id:           row.id,
       name:         row.name,
       display_name: row.display_name ?? row.name,
-      contact:      row.contact ?? undefined,
+      contact:      row.contact      ?? undefined,
       category:     (row.category as CustomerDetail["category"]) ?? "片思い",
       status:       (row.status   as CustomerDetail["status"])   ?? "new_reg",
-      tags:         JSON.parse(row.tags || "[]") as string[],
+      tags:         (() => { try { return JSON.parse(row.tags || "[]"); } catch { return []; } })() as string[],
       crisis_level: (row.crisis_level as CustomerDetail["crisis_level"]) ?? 1,
       temperature:  (row.temperature  as CustomerDetail["temperature"])  ?? "cool",
-      last_contact: row.last_contact,
-      next_action:  row.next_action,
-      total_amount: row.total_amount ?? 0,
-      notes:        row.notes        ?? undefined,
-      line_user_id: row.line_user_id ?? undefined,
+      last_contact: lastContact,
+      next_action:  row.next_action   ?? null,
+      total_amount: row.total_amount  ?? 0,
+      notes:        row.notes         ?? undefined,
+      line_user_id: row.line_user_id  ?? undefined,
       funnel_stage: 1,
       purchases:    [],
       actions:      [],
@@ -102,9 +89,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "更新項目がありません" }, { status: 400 });
     }
 
-    updates["updated_at"] = new Date();
+    updates["updated_at"] = new Date().toISOString();
 
-    await sql`UPDATE customers SET ${sql(updates)} WHERE id = ${customerId}`;
+    const { error } = await supabase
+      .from("customers")
+      .update(updates)
+      .eq("id", customerId);
+
+    if (error) throw error;
 
     return NextResponse.json({ ok: true });
   } catch (e) {

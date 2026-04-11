@@ -1,9 +1,7 @@
-// 売上管理ページ（DB実データ）
-// 注: appraisals.type は自由テキストのため、商品別売上は type 文字列でグルーピング。
-//     PRODUCTS との紐付けには appraisals テーブルへの product_id カラム追加が必要（未対応）。
+// 売上管理ページ（Supabase実データ）
 export const dynamic = "force-dynamic";
 
-import { sql } from "@/lib/db";
+import { supabase } from "@/lib/db";
 import { getProduct } from "@/lib/products";
 import type { ProductId } from "@/lib/products";
 
@@ -47,105 +45,68 @@ export default async function SalesPage() {
   }[] = [];
 
   try {
+    // 全 appraisals を顧客名付きで取得し、JS で集計
+    const { data: allAppraisals, error } = await supabase
+      .from("appraisals")
+      .select("id, customer_id, type, price, paid, notes, created_at, customers(name)")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const appraisals = allAppraisals ?? [];
+
+    // ── 月初・翌月初 ──────────────────────────────────
+    const now = new Date();
+    const monthStart     = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const thisMonth = appraisals.filter((a) => {
+      const d = new Date(a.created_at as string);
+      return d >= monthStart && d < nextMonthStart;
+    });
+
     // ── サマリー集計 ───────────────────────────────────
-    const [summary] = await sql<{
-      month_revenue:    string;
-      month_paid_count: string;
-      total_revenue:    string;
-      total_paid_count: string;
-      unpaid_amount:    string;
-      customer_count:   string;
-    }[]>`
-      SELECT
-        COALESCE(SUM(CASE WHEN paid = 1
-          AND created_at >= DATE_TRUNC('month', NOW())
-          AND created_at <  DATE_TRUNC('month', NOW()) + INTERVAL '1 month'
-          THEN price ELSE 0 END), 0)                                      AS month_revenue,
-        COUNT(*) FILTER (WHERE paid = 1
-          AND created_at >= DATE_TRUNC('month', NOW())
-          AND created_at <  DATE_TRUNC('month', NOW()) + INTERVAL '1 month') AS month_paid_count,
-        COALESCE(SUM(CASE WHEN paid = 1 THEN price ELSE 0 END), 0)        AS total_revenue,
-        COUNT(*) FILTER (WHERE paid = 1)                                   AS total_paid_count,
-        COALESCE(SUM(CASE WHEN paid = 0 AND price > 0 THEN price ELSE 0 END), 0) AS unpaid_amount,
-        COUNT(DISTINCT customer_id) FILTER (WHERE paid = 1)               AS customer_count
-      FROM appraisals
-    `;
-    monthRevenue   = Number(summary?.month_revenue    ?? 0);
-    monthPaidCount = Number(summary?.month_paid_count ?? 0);
-    totalRevenue   = Number(summary?.total_revenue    ?? 0);
-    totalPaidCount = Number(summary?.total_paid_count ?? 0);
-    unpaidAmount   = Number(summary?.unpaid_amount    ?? 0);
-    customerCount  = Number(summary?.customer_count   ?? 0);
+    monthRevenue   = thisMonth.filter((a) => a.paid === 1).reduce((s, a) => s + (a.price ?? 0), 0);
+    monthPaidCount = thisMonth.filter((a) => a.paid === 1).length;
+    totalRevenue   = appraisals.filter((a) => a.paid === 1).reduce((s, a) => s + (a.price ?? 0), 0);
+    totalPaidCount = appraisals.filter((a) => a.paid === 1).length;
+    unpaidAmount   = appraisals.filter((a) => a.paid === 0 && (a.price ?? 0) > 0).reduce((s, a) => s + (a.price ?? 0), 0);
+    customerCount  = new Set(appraisals.filter((a) => a.paid === 1).map((a) => a.customer_id)).size;
 
     // ── 顧客別累計ランキング ────────────────────────────
-    customerRank = (await sql<{
-      customer_id:   number;
-      customer_name: string;
-      total_revenue: string;
-      sale_count:    string;
-    }[]>`
-      SELECT
-        c.id                                                            AS customer_id,
-        c.name                                                          AS customer_name,
-        COALESCE(SUM(CASE WHEN a.paid = 1 THEN a.price ELSE 0 END), 0) AS total_revenue,
-        COUNT(a.id) FILTER (WHERE a.paid = 1)                          AS sale_count
-      FROM customers c
-      JOIN appraisals a ON a.customer_id = c.id
-      GROUP BY c.id, c.name
-      HAVING COALESCE(SUM(CASE WHEN a.paid = 1 THEN a.price ELSE 0 END), 0) > 0
-      ORDER BY total_revenue DESC
-    `).map((r) => ({
-      customer_id:   r.customer_id,
-      customer_name: r.customer_name,
-      total_revenue: Number(r.total_revenue),
-      sale_count:    Number(r.sale_count),
-    }));
+    const byCustomer = new Map<number, { name: string; total: number; count: number }>();
+    for (const a of appraisals) {
+      if (a.paid !== 1) continue;
+      const name = (a.customers as { name: string } | null)?.name ?? "不明";
+      const prev = byCustomer.get(a.customer_id) ?? { name, total: 0, count: 0 };
+      byCustomer.set(a.customer_id, { name, total: prev.total + (a.price ?? 0), count: prev.count + 1 });
+    }
+    customerRank = [...byCustomer.entries()]
+      .map(([id, v]) => ({ customer_id: id, customer_name: v.name, total_revenue: v.total, sale_count: v.count }))
+      .sort((a, b) => b.total_revenue - a.total_revenue);
 
     // ── 商品別売上（appraisals.type でグルーピング）───────
-    // ※ appraisals.type はスキーマ上の自由テキスト。
-    //   PRODUCTS との紐付けには product_id カラムの追加が必要。
-    breakdown = (await sql<{
-      type_label: string;
-      count:      string;
-      revenue:    string;
-    }[]>`
-      SELECT
-        type                                                            AS type_label,
-        COUNT(id) FILTER (WHERE paid = 1)                              AS count,
-        COALESCE(SUM(CASE WHEN paid = 1 THEN price ELSE 0 END), 0)    AS revenue
-      FROM appraisals
-      GROUP BY type
-      HAVING COALESCE(SUM(CASE WHEN paid = 1 THEN price ELSE 0 END), 0) > 0
-      ORDER BY revenue DESC
-    `).map((r) => ({
-      type_label: r.type_label,
-      count:      Number(r.count),
-      revenue:    Number(r.revenue),
-    }));
+    const byType = new Map<string, { count: number; revenue: number }>();
+    for (const a of appraisals) {
+      if (a.paid !== 1) continue;
+      const prev = byType.get(a.type) ?? { count: 0, revenue: 0 };
+      byType.set(a.type, { count: prev.count + 1, revenue: prev.revenue + (a.price ?? 0) });
+    }
+    breakdown = [...byType.entries()]
+      .map(([type_label, v]) => ({ type_label, count: v.count, revenue: v.revenue }))
+      .filter((v) => v.revenue > 0)
+      .sort((a, b) => b.revenue - a.revenue);
 
     // ── 最近の売上（直近12件）──────────────────────────
-    recentSales = await sql<{
-      id:            number;
-      customer_name: string;
-      type:          string;
-      amount:        number;
-      paid:          number;
-      notes:         string | null;
-      date:          string;
-    }[]>`
-      SELECT
-        a.id,
-        c.name         AS customer_name,
-        a.type,
-        a.price        AS amount,
-        a.paid,
-        a.notes,
-        DATE(a.created_at) AS date
-      FROM appraisals a
-      JOIN customers c ON c.id = a.customer_id
-      ORDER BY a.created_at DESC
-      LIMIT 12
-    `;
+    recentSales = appraisals.slice(0, 12).map((a) => ({
+      id:            a.id,
+      customer_name: (a.customers as { name: string } | null)?.name ?? "不明",
+      type:          a.type,
+      amount:        a.price ?? 0,
+      paid:          a.paid,
+      notes:         (a.notes as string | null) ?? null,
+      date:          String(a.created_at).slice(0, 10),
+    }));
   } catch (e) {
     console.error("[SalesPage] DB error:", e);
   }
@@ -203,7 +164,7 @@ export default async function SalesPage() {
       {/* ── 2カラム：商品別 & 顧客ランク ────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* 商品別売上（appraisals.type でグルーピング） */}
+        {/* 商品別売上 */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-3.5 border-b border-gray-50">
             <h3 className="text-sm font-semibold text-gray-800">種別売上</h3>
@@ -214,7 +175,6 @@ export default async function SalesPage() {
               <p className="text-sm text-gray-300 py-6 text-center">データなし</p>
             ) : (
               breakdown.map((row) => {
-                // appraisals.type が ProductId と一致する場合はバッジ表示
                 const product = getProduct(row.type_label as ProductId);
                 const barPct  = Math.round((row.revenue / maxRevenue) * 100);
                 return (
@@ -233,7 +193,6 @@ export default async function SalesPage() {
                       </div>
                       <span className="text-sm font-semibold text-gray-800">{fmt(row.revenue)}</span>
                     </div>
-                    {/* バー */}
                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${product?.dotClass ?? "bg-brand-400"}`}
@@ -260,7 +219,6 @@ export default async function SalesPage() {
             <div className="divide-y divide-gray-50">
               {customerRank.map((c, i) => (
                 <div key={c.customer_id} className="flex items-center gap-3 px-5 py-3.5">
-                  {/* 順位 */}
                   <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                     i === 0 ? "bg-amber-100 text-amber-700"
                     : i === 1 ? "bg-gray-100 text-gray-600"
@@ -269,7 +227,6 @@ export default async function SalesPage() {
                   }`}>
                     {i + 1}
                   </span>
-                  {/* アバター */}
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-200 to-pink-200 flex items-center justify-center flex-shrink-0">
                     <span className="text-xs font-bold text-brand-700">{(c.customer_name || "?")[0]}</span>
                   </div>
@@ -358,12 +315,8 @@ export default async function SalesPage() {
                 </tbody>
               </table>
             </div>
-
-            {/* フッター */}
             <div className="px-5 py-3 border-t border-gray-50 bg-gray-50/50">
-              <p className="text-xs text-gray-400">
-                直近 {recentSales.length} 件を表示
-              </p>
+              <p className="text-xs text-gray-400">直近 {recentSales.length} 件を表示</p>
             </div>
           </>
         )}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   let body: unknown;
@@ -32,42 +32,61 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      // customers upsert（存在しなければ新規作成、name は NOT NULL なので line_user_id を仮置き）
-      const customerPayload = { line_user_id: lineUserId, name: lineUserId };
-      console.log("[webhook] customer upsert payload", customerPayload);
-      await sql`
-        INSERT INTO customers (line_user_id, name, created_at, updated_at)
-        VALUES (${lineUserId}, ${lineUserId}, NOW(), NOW())
-        ON CONFLICT (line_user_id) DO UPDATE SET updated_at = NOW()
-      `;
+      // 既存顧客を検索
+      const { data: existing } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("line_user_id", lineUserId)
+        .maybeSingle();
 
-      // customers.id を取得
-      const rows = await sql<{ id: number }[]>`
-        SELECT id FROM customers WHERE line_user_id = ${lineUserId} LIMIT 1
-      `;
-      const customerId = rows[0]?.id;
+      let customerId: number | null = null;
+
+      if (existing) {
+        // 既存顧客: updated_at のみ更新（name は保持）
+        customerId = existing.id;
+        await supabase
+          .from("customers")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", existing.id);
+      } else {
+        // 新規顧客: 作成（name は line_user_id を仮置き）
+        const { data: created, error: insertError } = await supabase
+          .from("customers")
+          .insert({ line_user_id: lineUserId, name: lineUserId })
+          .select("id")
+          .single();
+
+        if (insertError) {
+          console.error("[webhook] customer insert error", insertError);
+          continue;
+        }
+        customerId = created?.id ?? null;
+      }
 
       if (customerId == null) {
         console.error("[webhook] customerId not found after upsert", { lineUserId });
         continue;
       }
 
-      // messages 保存（schema.sql に従い topic カラムなし・source/direction/text は NOT NULL）
-      const messagePayload = { customer_id: customerId, source: "line", direction: "inbound", text };
-      console.log("[webhook] message insert payload", messagePayload);
-      await sql`
-        INSERT INTO messages (customer_id, source, direction, text, created_at)
-        VALUES (${customerId}, ${"line"}, ${"inbound"}, ${text}, NOW())
-      `;
+      // messages 保存
+      const { error: msgError } = await supabase
+        .from("messages")
+        .insert({
+          customer_id: customerId,
+          source:      "line",
+          direction:   "inbound",
+          text,
+        });
+
+      if (msgError) {
+        console.error("[webhook] message insert error", msgError);
+      }
     } catch (err) {
-      console.error("[webhook] DB error", JSON.stringify({
+      console.error("[webhook] error", {
         lineUserId,
         text,
         error: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack : undefined,
-        detail: (err as Record<string, unknown>)?.detail ?? null,
-        code:   (err as Record<string, unknown>)?.code   ?? null,
-      }));
+      });
       // DB エラーでも LINE には 200 を返す（再送ループを防ぐ）
     }
   }

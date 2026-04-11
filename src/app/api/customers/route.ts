@@ -1,56 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db";
+import { supabase } from "@/lib/db";
 import type { CustomerRow } from "@/app/customers/dummyData";
 
 // ─── GET /api/customers ────────────────────────────────────
 export async function GET() {
   try {
-    const rows = await sql<{
-      id:           number;
-      name:         string;
-      display_name: string | null;
-      category:     string;
-      status:       string;
-      tags:         string;
-      crisis_level: number;
-      temperature:  string;
-      next_action:  string | null;
-      total_amount: number;
-      last_contact: string;
-    }[]>`
-      SELECT
-        c.id,
-        c.name,
-        COALESCE(c.display_name, c.name) AS display_name,
-        c.category,
-        c.status,
-        c.tags,
-        c.crisis_level,
-        c.temperature,
-        c.next_action,
-        c.total_amount,
-        COALESCE(
-          (SELECT DATE(m.created_at)
-           FROM messages m
-           WHERE m.customer_id = c.id
-           ORDER BY m.created_at DESC
-           LIMIT 1),
-          DATE(c.updated_at)
-        ) AS last_contact
-      FROM customers c
-      ORDER BY last_contact DESC
-    `;
+    const { data: rows, error } = await supabase
+      .from("customers")
+      .select("id, name, display_name, category, status, tags, crisis_level, temperature, next_action, total_amount, updated_at")
+      .order("updated_at", { ascending: false });
 
-    const customers: CustomerRow[] = rows.map((r) => ({
+    if (error) throw error;
+
+    const customers: CustomerRow[] = (rows ?? []).map((r) => ({
       id:           r.id,
       name:         r.name,
       display_name: r.display_name ?? r.name,
       category:     (r.category as CustomerRow["category"]) ?? "片思い",
       status:       (r.status   as CustomerRow["status"])   ?? "new_reg",
-      tags:         JSON.parse(r.tags || "[]") as string[],
-      crisis_level: (r.crisis_level as CustomerRow["crisis_level"]) ?? 1,
+      tags:         (() => { try { return JSON.parse(r.tags || "[]"); } catch { return []; } })() as string[],
+      crisis_level: (Math.min(5, Math.max(1, r.crisis_level ?? 1))) as CustomerRow["crisis_level"],
       temperature:  (r.temperature as CustomerRow["temperature"]) ?? "cool",
-      last_contact: r.last_contact,
+      last_contact: r.updated_at ? String(r.updated_at).slice(0, 10) : "",
       next_action:  r.next_action,
       total_amount: r.total_amount ?? 0,
     }));
@@ -72,18 +43,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "名前は必須です" }, { status: 400 });
     }
 
-    const [row] = await sql`
-      INSERT INTO customers (name, display_name, contact, status, tags, notes)
-      VALUES (
-        ${name.trim()},
-        ${display_name?.trim() || null},
-        ${contact?.trim()      || null},
-        ${status               || "new_reg"},
-        ${JSON.stringify(tags  || [])},
-        ${notes?.trim()        || null}
-      )
-      RETURNING *
-    `;
+    const { data: row, error } = await supabase
+      .from("customers")
+      .insert({
+        name:         name.trim(),
+        display_name: display_name?.trim() || null,
+        contact:      contact?.trim()      || null,
+        status:       status               || "new_reg",
+        tags:         JSON.stringify(tags  || []),
+        notes:        notes?.trim()        || null,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
 
     return NextResponse.json(
       { ...row, tags: JSON.parse(row.tags) },

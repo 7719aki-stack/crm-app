@@ -3,15 +3,25 @@ import { supabase } from "@/lib/db";
 
 async function fetchLineDisplayName(userId: string): Promise<string | null> {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  if (!token) return null;
+  if (!token) {
+    console.warn("[webhook] LINE_CHANNEL_ACCESS_TOKEN is not set");
+    return null;
+  }
+  console.log("[webhook] fetching profile for userId:", userId);
   try {
     const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "(unreadable)");
+      console.error("[webhook] profile error: status", res.status, errText);
+      return null;
+    }
     const data = await res.json() as { displayName?: string };
+    console.log("[webhook] profile success:", { displayName: data.displayName });
     return data.displayName ?? null;
-  } catch {
+  } catch (err) {
+    console.error("[webhook] profile error:", err instanceof Error ? err.message : String(err));
     return null;
   }
 }
@@ -61,11 +71,18 @@ export async function POST(req: NextRequest) {
         customerId = existing.id;
         if (!existing.display_name) {
           const displayName = await fetchLineDisplayName(line_user_id);
-          await supabase
+          console.log("[webhook] updating customer display_name:", { id: existing.id, display_name: displayName });
+          const { error: updateError } = await supabase
             .from("customers")
             .update({ updated_at: new Date().toISOString(), display_name: displayName ?? undefined })
             .eq("id", existing.id);
+          if (updateError) {
+            console.error("[webhook] customer update error:", updateError);
+          } else {
+            console.log("[webhook] customer updated: display_name set to", displayName);
+          }
         } else {
+          console.log("[webhook] customer already has display_name:", existing.display_name, "— skipping profile fetch");
           await supabase
             .from("customers")
             .update({ updated_at: new Date().toISOString() })
@@ -74,6 +91,7 @@ export async function POST(req: NextRequest) {
       } else {
         // 新規顧客: displayName を取得して保存
         const displayName = await fetchLineDisplayName(line_user_id);
+        console.log("[webhook] updating customer display_name:", { line_user_id, display_name: displayName });
         const { data: created, error: insertError } = await supabase
           .from("customers")
           .insert({ line_user_id, name: line_user_id, display_name: displayName ?? null })
@@ -84,6 +102,7 @@ export async function POST(req: NextRequest) {
           console.error("[webhook] customer insert error", insertError);
           continue;
         }
+        console.log("[webhook] customer updated: display_name set to", displayName);
         customerId = created?.id ?? null;
       }
 

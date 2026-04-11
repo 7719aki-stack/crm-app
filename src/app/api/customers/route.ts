@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const { data: rows, error } = await supabase
       .from("customers")
-      .select("id, name, display_name, category, status, tags, crisis_level, temperature, next_action, total_amount, updated_at")
+      .select("id, name, display_name, category, status, tags, crisis_level, temperature, next_action, total_amount, updated_at, created_at")
       .order("updated_at", { ascending: false });
 
     if (error) throw error;
@@ -24,6 +24,7 @@ export async function GET() {
       last_contact: r.updated_at ? String(r.updated_at).slice(0, 10) : "",
       next_action:  r.next_action,
       total_amount: r.total_amount ?? 0,
+      created_at:   r.created_at ? String(r.created_at).slice(0, 10) : "",
     }));
 
     return NextResponse.json(customers);

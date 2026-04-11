@@ -11,6 +11,7 @@ type CustomerRow = {
   tags:         string;
   crisis_level: number;
   temperature:  string;
+  created_at:   string;
   updated_at:   string;
   next_action:  string | null;
   total_amount: number;
@@ -75,15 +76,22 @@ export type Database = {
   };
 };
 
-// ─── シングルトン ──────────────────────────────────────────
+// ─── シングルトン（遅延初期化）────────────────────────────
 const g = globalThis as unknown as { _supabase?: SupabaseClient<Database> };
 
-if (!g._supabase) {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY;
-  if (!url) throw new Error("SUPABASE_URL が設定されていません");
-  if (!key) throw new Error("SUPABASE_ANON_KEY が設定されていません");
-  g._supabase = createClient<Database>(url, key);
+function getSupabase(): SupabaseClient<Database> {
+  if (!g._supabase) {
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_ANON_KEY;
+    if (!url) throw new Error("SUPABASE_URL が設定されていません");
+    if (!key) throw new Error("SUPABASE_ANON_KEY が設定されていません");
+    g._supabase = createClient<Database>(url, key);
+  }
+  return g._supabase;
 }
 
-export const supabase: SupabaseClient<Database> = g._supabase!;
+export const supabase = new Proxy({} as SupabaseClient<Database>, {
+  get(_target, prop) {
+    return (getSupabase() as unknown as Record<string | symbol, unknown>)[prop];
+  },
+});

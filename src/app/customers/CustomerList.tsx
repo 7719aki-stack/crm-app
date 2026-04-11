@@ -242,6 +242,7 @@ export function CustomerList() {
   const [filterGroup,  setFilterGroup]  = useState<GroupFilter>("all");
   const [searchText,   setSearchText]   = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [loading,      setLoading]      = useState(true);
 
   useEffect(() => {
     // DB から顧客データを取得
@@ -254,7 +255,8 @@ export function CustomerList() {
         if (Array.isArray(data)) setCustomers(data as CustomerRow[]);
         else console.error("[CustomerList] unexpected response:", data);
       })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => setLoading(false));
     // タグマスタを読み込む
     setTagGroups(loadTagMaster());
   }, []);
@@ -344,7 +346,15 @@ export function CustomerList() {
       )}
 
       {/* テーブル */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="bg-white rounded-xl border border-gray-100 py-20 text-center">
+          <p className="text-sm text-gray-300">読み込み中...</p>
+        </div>
+      ) : customers.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 py-20 text-center">
+          <p className="text-sm text-gray-300">顧客データがありません</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 py-20 text-center">
           <p className="text-sm text-gray-300">条件に一致する顧客が見つかりませんでした</p>
         </div>
@@ -359,6 +369,7 @@ export function CustomerList() {
                     { label: "顧客名",       w: "w-44" },
                     { label: "カテゴリ",     w: "w-24" },
                     { label: "ステータス",   w: "w-20" },
+                    { label: "登録日",       w: "w-24" },
                     { label: "タグ",         w: "w-52" },
                     { label: "危機度",       w: "w-20" },
                     { label: "温度感",       w: "w-24" },
@@ -438,6 +449,11 @@ function CustomerTableRow({
       {/* ステータス */}
       <td className="px-4 py-3.5">
         <StatusBadge status={c.status} />
+      </td>
+
+      {/* 登録日 */}
+      <td className="px-4 py-3.5">
+        <span className="text-xs text-gray-500">{c.created_at ?? "—"}</span>
       </td>
 
       {/* タグ */}

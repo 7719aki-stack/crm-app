@@ -20,9 +20,10 @@ export interface CustomerRow {
   tags:          string[];
   crisis_level:  CrisisLevel;
   temperature:   Temperature;
-  last_contact:  string;       // YYYY-MM-DD
+  last_contact:  string;        // YYYY-MM-DD
   next_action:   string | null; // YYYY-MM-DD
   total_amount:  number;        // 円
+  created_at?:   string;        // YYYY-MM-DD
 }
 
 // ─── 詳細画面用の拡張型 ───────────────────────────────

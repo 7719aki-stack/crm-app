@@ -26,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .from("messages")
       .select("id, customer_id, source, direction, text, raw_type, created_at")
       .eq("customer_id", customerId)
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: true })
       .limit(200);
 
     if (error) throw error;

@@ -105,32 +105,38 @@ function SectionCard({
 // ── LINE受信メッセージ履歴 ────────────────────────────────
 function LineMessageHistory({ messages }: { messages: DbMessage[] }) {
   if (messages.length === 0) {
-    return <p className="text-xs text-gray-400">受信メッセージなし</p>;
+    return <p className="text-xs text-gray-400">メッセージ履歴はありません</p>;
   }
   return (
     <ol className="space-y-2">
-      {messages.map((m) => (
-        <li key={m.id} className="flex gap-3 items-start">
-          <div className={`flex-shrink-0 mt-0.5 w-2.5 h-2.5 rounded-full mt-1.5 ${
-            m.direction === "inbound" ? "bg-sky-400" : "bg-green-400"
-          }`} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                m.direction === "inbound"
-                  ? "bg-sky-50 text-sky-700 border border-sky-100"
-                  : "bg-green-50 text-green-700 border border-green-100"
-              }`}>
-                {m.direction === "inbound" ? "受信" : "送信"}
-              </span>
-              <span className="text-[11px] text-gray-400">
-                {m.created_at.replace("T", " ").slice(0, 16)}
-              </span>
+      {messages.map((m) => {
+        const dt = m.created_at.replace("T", " ").slice(0, 16);
+        return (
+          <li key={m.id} className="flex gap-3 items-start">
+            <div className={`flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1.5 ${
+              m.direction === "inbound" ? "bg-sky-400" : "bg-green-400"
+            }`} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                  m.direction === "inbound"
+                    ? "bg-sky-50 text-sky-700 border border-sky-100"
+                    : "bg-green-50 text-green-700 border border-green-100"
+                }`}>
+                  {m.direction === "inbound" ? "受信" : "送信"}
+                </span>
+                {m.source && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-50 text-gray-500 border border-gray-100">
+                    {m.source}
+                  </span>
+                )}
+                <span className="text-[11px] text-gray-400">{dt}</span>
+              </div>
+              <p className="text-sm text-gray-700 leading-snug whitespace-pre-wrap break-all">{m.text}</p>
             </div>
-            <p className="text-sm text-gray-700 leading-snug whitespace-pre-wrap break-all">{m.text}</p>
-          </div>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -401,8 +407,8 @@ export default function CustomerDetailPage() {
             />
           </SectionCard>
 
-          {/* LINE受信メッセージ履歴（DBから） */}
-          <SectionCard title="LINE受信メッセージ履歴（自動受信）">
+          {/* メッセージ履歴（DBから） */}
+          <SectionCard title="メッセージ履歴">
             <LineMessageHistory messages={dbMessages} />
           </SectionCard>
 

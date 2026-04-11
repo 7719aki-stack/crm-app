@@ -24,13 +24,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
     }
 
     // last_contact: 最新メッセージ日 or updated_at
-    const { data: lastMsg } = await supabase
+    const { data: lastMsg } = (await supabase
       .from("messages")
       .select("created_at")
       .eq("customer_id", customerId)
       .order("created_at", { ascending: false })
       .limit(1)
-      .maybeSingle();
+      .maybeSingle()) as unknown as { data: { created_at: string | null } | null };
 
     const lastContact = lastMsg?.created_at
       ? String(lastMsg.created_at).slice(0, 10)
@@ -93,7 +93,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const { error } = await supabase
       .from("customers")
-      .update(updates)
+      .update(updates as unknown as never)
       .eq("id", customerId);
 
     if (error) throw error;

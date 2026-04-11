@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error || !row) throw error ?? new Error("insert returned null");
 
     return NextResponse.json(
       { ...row, tags: JSON.parse(row.tags) },

@@ -23,11 +23,11 @@ export async function POST(req: NextRequest) {
     const msg = ev.message as Record<string, unknown> | undefined;
     if (!msg || msg.type !== "text") continue;
 
-    const lineUserId = (ev.source as Record<string, unknown> | undefined)?.userId as string | undefined;
-    const text       = (msg.text as string | undefined) ?? "";
+    const line_user_id = (ev.source as Record<string, unknown> | undefined)?.userId as string | undefined;
+    const text         = (msg.text as string | undefined) ?? "";
 
-    if (!lineUserId) {
-      console.error("[webhook] lineUserId is missing in event", ev);
+    if (!line_user_id) {
+      console.error("[webhook] line_user_id is missing in event", ev);
       continue;
     }
 
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       const { data: existing } = await supabase
         .from("customers")
         .select("id")
-        .eq("line_user_id", lineUserId)
+        .eq("line_user_id", line_user_id)
         .maybeSingle();
 
       let customerId: number | null = null;
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
         // 新規顧客: 作成（name は line_user_id を仮置き）
         const { data: created, error: insertError } = await supabase
           .from("customers")
-          .insert({ line_user_id: lineUserId, name: lineUserId })
+          .insert({ line_user_id, name: line_user_id })
           .select("id")
           .single();
 
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (customerId == null) {
-        console.error("[webhook] customerId not found after upsert", { lineUserId });
+        console.error("[webhook] customerId not found after upsert", { line_user_id });
         continue;
       }
 
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       }
     } catch (err) {
       console.error("[webhook] error", {
-        lineUserId,
+        line_user_id,
         text,
         error: err instanceof Error ? err.message : String(err),
       });

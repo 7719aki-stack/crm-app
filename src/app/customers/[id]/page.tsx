@@ -151,8 +151,8 @@ export default function CustomerDetailPage() {
   const [notes,           setNotes]           = useState("");
   const [editNotes,       setEditNotes]       = useState(false);
   const [actions,         setActions]         = useState<ActionEntry[]>([]);
-  const [lineUserId,      setLineUserId]      = useState("");
-  const [lineUserIdDraft, setLineUserIdDraft] = useState("");
+  const [line_user_id,      set_line_user_id]      = useState("");
+  const [line_user_id_draft, set_line_user_id_draft] = useState("");
   const [editLineId,      setEditLineId]      = useState(false);
   const [savingLineId,    setSavingLineId]    = useState(false);
   const [savingTags,      setSavingTags]      = useState(false);
@@ -191,8 +191,8 @@ export default function CustomerDetailPage() {
         setStatus(c.status);
         setTags(c.tags ?? []);
         setNotes(c.notes ?? "");
-        setLineUserId(c.line_user_id ?? "");
-        setLineUserIdDraft(c.line_user_id ?? "");
+        set_line_user_id(c.line_user_id ?? "");
+        set_line_user_id_draft(c.line_user_id ?? "");
         setActions(c.actions ?? []);
         setLineMessageState(getCustomerMessageDraft(customerId));
       }
@@ -216,14 +216,14 @@ export default function CustomerDetailPage() {
   }
 
   // ── LINE ID 保存 ─────────────────────────────────────────
-  async function saveLineUserId() {
+  async function save_line_user_id() {
     setSavingLineId(true);
     await fetch(`/api/customers/${customerId}`, {
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ line_user_id: lineUserIdDraft }),
+      body:    JSON.stringify({ line_user_id: line_user_id_draft }),
     });
-    setLineUserId(lineUserIdDraft);
+    set_line_user_id(line_user_id_draft);
     setEditLineId(false);
     setSavingLineId(false);
   }
@@ -421,7 +421,7 @@ export default function CustomerDetailPage() {
           <SectionCard title="LINE 送信">
             <LineSendPanel
               customerId={customer.id}
-              lineUserId={lineUserId || undefined}
+              line_user_id={line_user_id || undefined}
               onSent={(entry) => setActions((prev) => [entry, ...prev])}
               injectText={lineMessage}
             />
@@ -520,7 +520,7 @@ export default function CustomerDetailPage() {
                   <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">LINE ID</p>
                   {!editLineId && (
                     <button
-                      onClick={() => { setLineUserIdDraft(lineUserId); setEditLineId(true); }}
+                      onClick={() => { set_line_user_id_draft(line_user_id); setEditLineId(true); }}
                       className="text-[11px] text-gray-400 hover:text-brand-600 transition-colors"
                     >
                       編集
@@ -531,20 +531,20 @@ export default function CustomerDetailPage() {
                   <div className="space-y-2">
                     <input
                       type="text"
-                      value={lineUserIdDraft}
-                      onChange={(e) => setLineUserIdDraft(e.target.value)}
+                      value={line_user_id_draft}
+                      onChange={(e) => set_line_user_id_draft(e.target.value)}
                       placeholder="Uxxxxxxxxxxxxxxxxx..."
                       className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent"
                     />
                     <div className="flex gap-1.5">
                       <button
-                        onClick={() => { setLineUserIdDraft(lineUserId); setEditLineId(false); }}
+                        onClick={() => { set_line_user_id_draft(line_user_id); setEditLineId(false); }}
                         className="flex-1 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-500 hover:border-gray-300 transition-colors"
                       >
                         キャンセル
                       </button>
                       <button
-                        onClick={saveLineUserId}
+                        onClick={save_line_user_id}
                         disabled={savingLineId}
                         className="flex-1 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 disabled:opacity-50 transition-colors"
                       >
@@ -552,8 +552,8 @@ export default function CustomerDetailPage() {
                       </button>
                     </div>
                   </div>
-                ) : lineUserId ? (
-                  <p className="text-xs font-mono text-gray-700 break-all">{lineUserId}</p>
+                ) : line_user_id ? (
+                  <p className="text-xs font-mono text-gray-700 break-all">{line_user_id}</p>
                 ) : (
                   <p className="text-xs text-gray-300">未設定（LINE Webhook で自動設定）</p>
                 )}

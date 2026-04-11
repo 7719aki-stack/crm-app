@@ -7,16 +7,16 @@ const TONES = ["共感", "背中押し", "アップセル", "報告受け", "フ
 type Tone = typeof TONES[number];
 
 interface Props {
-  customerId:   number;
-  lineUserId?:  string;
-  onSent:       (entry: ActionEntry) => void;
+  customerId:    number;
+  line_user_id?: string;
+  onSent:        (entry: ActionEntry) => void;
   /** 外部から注入するテキスト（返信候補選択時など）。変化するたびに入力欄に反映 */
-  injectText?:  string;
+  injectText?:   string;
 }
 
 type Phase = "input" | "confirm" | "sending" | "done" | "error";
 
-export function LineSendPanel({ customerId, lineUserId, onSent, injectText }: Props) {
+export function LineSendPanel({ customerId, line_user_id, onSent, injectText }: Props) {
   const [text,         setText]         = useState("");
   const [selectedTone, setSelectedTone] = useState<Tone>("共感");
   const [nextAction,   setNextAction]   = useState("");
@@ -38,7 +38,7 @@ export function LineSendPanel({ customerId, lineUserId, onSent, injectText }: Pr
       const res = await fetch("/api/line/push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, to: lineUserId }),
+        body: JSON.stringify({ text, to: line_user_id }),
       });
 
       const json = await res.json();
@@ -110,8 +110,8 @@ export function LineSendPanel({ customerId, lineUserId, onSent, injectText }: Pr
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
           <span className="font-semibold">送信先:</span>
-          {lineUserId
-            ? <span className="font-mono text-gray-700">{lineUserId}</span>
+          {line_user_id
+            ? <span className="font-mono text-gray-700">{line_user_id}</span>
             : <span className="text-amber-600">TEST_USER_ID（フォールバック）</span>
           }
           <span className="font-semibold ml-2">トーン:</span>
@@ -204,8 +204,8 @@ export function LineSendPanel({ customerId, lineUserId, onSent, injectText }: Pr
         確認する →
       </button>
 
-      {lineUserId ? (
-        <p className="text-[10px] text-gray-400 text-center font-mono truncate">送信先: {lineUserId}</p>
+      {line_user_id ? (
+        <p className="text-[10px] text-gray-400 text-center font-mono truncate">送信先: {line_user_id}</p>
       ) : (
         <p className="text-[10px] text-amber-500 text-center">LINE ID 未設定 — テスト用 ID に送信されます</p>
       )}

@@ -26,6 +26,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!text) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }
+  if (text.length > 5000) {
+    return NextResponse.json({ error: "text is too long" }, { status: 400 });
+  }
 
   // 1. 顧客の line_user_id を取得
   const { data: customer, error: customerError } = await supabase
@@ -64,10 +67,10 @@ export async function POST(req: NextRequest, { params }: Params) {
   });
 
   if (!lineRes.ok) {
-    const detail = await lineRes.json().catch(() => ({ message: lineRes.statusText }));
-    console.error("[POST /api/customers/[id]/messages] LINE送信失敗", detail);
+    const detailText = await lineRes.text().catch(() => lineRes.statusText);
+    console.error("[POST /api/customers/[id]/messages] LINE送信失敗", lineRes.status, detailText);
     return NextResponse.json(
-      { error: "LINE送信に失敗しました", detail },
+      { error: "LINE送信に失敗しました", detail: detailText },
       { status: lineRes.status }
     );
   }
@@ -81,17 +84,19 @@ export async function POST(req: NextRequest, { params }: Params) {
         source:      "manual",
         direction:   "outbound",
         text,
-        created_at:  new Date().toISOString(),
       })
       .select("id, customer_id, source, direction, text, raw_type, created_at")
-      .single();
+      .single<DbMessage>();
 
     if (error) throw error;
 
     return NextResponse.json(data, { status: 201 });
   } catch (e) {
     console.error("[POST /api/customers/[id]/messages]", e);
-    return NextResponse.json({ error: "保存に失敗しました" }, { status: 500 });
+    return NextResponse.json(
+      { error: "LINE送信は成功しましたが、履歴保存に失敗しました" },
+      { status: 500 }
+    );
   }
 }
 

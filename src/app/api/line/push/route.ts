@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const TOKEN       = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-const TEST_USER_ID = process.env.LINE_TEST_USER_ID;
-
 export async function POST(req: NextRequest) {
+  // リクエストごとに環境変数を読む（モジュールレベルだと起動時評価で .env.local が反映されない場合がある）
+  const TOKEN        = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const TEST_USER_ID = process.env.LINE_TEST_USER_ID;
+
+  console.log("[push] token source: LINE_CHANNEL_ACCESS_TOKEN, exists:", !!TOKEN,
+    TOKEN ? `length=${TOKEN.length}` : "MISSING");
+
   if (!TOKEN) {
     return NextResponse.json({ error: "LINE_CHANNEL_ACCESS_TOKEN が未設定です" }, { status: 500 });
   }
@@ -33,6 +37,11 @@ export async function POST(req: NextRequest) {
 
   if (!res.ok) {
     const detail = await res.json().catch(() => ({ message: res.statusText }));
+    console.error("[push] LINE API 失敗",
+      "env_var: LINE_CHANNEL_ACCESS_TOKEN",
+      "token_length:", TOKEN.length,
+      "status:", res.status,
+      "detail:", JSON.stringify(detail));
     return NextResponse.json({ error: detail }, { status: res.status });
   }
 

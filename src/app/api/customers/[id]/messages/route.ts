@@ -72,7 +72,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   // 2. LINE Messaging API でメッセージ送信
   const TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  log("LINE_CHANNEL_ACCESS_TOKEN 存在:", !!TOKEN);
+  log("token source: LINE_CHANNEL_ACCESS_TOKEN, exists:", !!TOKEN,
+    TOKEN ? `length=${TOKEN.length}` : "MISSING");
 
   if (!TOKEN) {
     console.error("[POST messages] LINE_CHANNEL_ACCESS_TOKEN が未設定");
@@ -101,6 +102,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!lineRes.ok) {
     console.error(
       "[POST messages] LINE送信失敗",
+      "env_var: LINE_CHANNEL_ACCESS_TOKEN",
+      "token_length:", TOKEN.length,
       "customerId:", customerId,
       "masked_id:", maskedId,
       "status:", lineRes.status,

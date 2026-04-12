@@ -168,6 +168,9 @@ export default function CustomerDetailPage() {
   const [replySending,    setReplySending]    = useState(false);
   const [replyError,      setReplyError]      = useState<string | null>(null);
   const [replySuccess,    setReplySuccess]    = useState(false);
+  const [aiCandidates,   setAiCandidates]   = useState<string[] | null>(null);
+  const [aiLoading,      setAiLoading]      = useState(false);
+  const [aiError,        setAiError]        = useState<string | null>(null);
 
   function setLineMessage(text: string) {
     setLineMessageState(text);
@@ -179,6 +182,34 @@ export default function CustomerDetailPage() {
       saveCustomerMessageDraft(customerId, next);
       return next;
     });
+  }
+
+  // ── AI返信候補生成 ────────────────────────────────────────
+  async function generateAiReplies() {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await fetch(`/api/customers/${customerId}/reply-suggestions`, {
+        method: "POST",
+      });
+      const data = await res.json() as {
+        candidates?: Array<{ label: string; text: string }>;
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data.error ?? "AI生成に失敗しました");
+      }
+      if (!Array.isArray(data.candidates) || data.candidates.length === 0) {
+        throw new Error("AI返信候補を取得できませんでした");
+      }
+      setAiCandidates(
+        data.candidates.map((c) => `【${c.label}】\n${c.text}`)
+      );
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "AI生成に失敗しました");
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   // ── データ取得 ──────────────────────────────────────────
@@ -672,15 +703,39 @@ export default function CustomerDetailPage() {
           </SectionCard>
 
           {/* 返信候補 */}
-          <SectionCard title="返信候補">
+          <SectionCard
+            title="返信候補"
+            action={
+              <div className="flex items-center gap-2">
+                {aiCandidates && (
+                  <button
+                    onClick={() => { setAiCandidates(null); setAiError(null); }}
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    リセット
+                  </button>
+                )}
+                <button
+                  onClick={generateAiReplies}
+                  disabled={aiLoading}
+                  className="inline-flex items-center gap-1 text-xs bg-brand-600 text-white px-2.5 py-1 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors"
+                >
+                  {aiLoading ? "生成中…" : "✨ AI返信を作成"}
+                </button>
+              </div>
+            }
+          >
+            {aiError && (
+              <p className="text-xs text-red-500 mb-2">{aiError}</p>
+            )}
             {(() => {
-              const candidates = generateReplyCandidates(tags);
+              const candidates = aiCandidates ?? generateReplyCandidates(tags);
               return (
                 <ReplyCandidatesPanel
                   candidates={candidates}
                   onSelect={(text) => setLineMessage(text)}
                   onAppend={(text) => appendLineMessage(text)}
-                  salesStartIndex={candidates.length - 1}
+                  salesStartIndex={aiCandidates ? undefined : candidates.length - 1}
                 />
               );
             })()}

@@ -23,12 +23,20 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const body = await req.json().catch(() => ({}));
   const text: string = typeof body.text === "string" ? body.text.trim() : "";
+  const debug: boolean = body.debug === true;
+
   if (!text) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }
   if (text.length > 5000) {
     return NextResponse.json({ error: "text is too long" }, { status: 400 });
   }
+
+  const log = (...args: unknown[]) => {
+    if (debug) console.log("[LINE DEBUG]", ...args);
+  };
+
+  log("customerId:", customerId);
 
   // 1. 顧客の line_user_id を取得
   const { data: customer, error: customerError } = await supabase
@@ -38,21 +46,44 @@ export async function POST(req: NextRequest, { params }: Params) {
     .single();
 
   if (customerError || !customer) {
+    console.error("[POST messages] 顧客取得失敗 customerId:", customerId, customerError);
     return NextResponse.json({ error: "顧客が見つかりません" }, { status: 404 });
   }
 
-  if (!customer.line_user_id) {
+  const lineUserId: string = customer.line_user_id ?? "";
+  if (!lineUserId) {
     return NextResponse.json(
       { error: "LINE IDが設定されていません。顧客詳細でLINE IDを登録してください。" },
       { status: 400 }
     );
   }
 
+  // to が string かつ空文字でないことを確認
+  if (typeof lineUserId !== "string" || lineUserId.trim() === "") {
+    console.error("[POST messages] line_user_id が無効 customerId:", customerId, "value:", lineUserId);
+    return NextResponse.json({ error: "line_user_id が無効です" }, { status: 400 });
+  }
+
+  const maskedId =
+    lineUserId.length > 10
+      ? `${lineUserId.slice(0, 5)}...${lineUserId.slice(-5)}`
+      : `${lineUserId.slice(0, 2)}***`;
+  log("line_user_id (masked):", maskedId);
+
   // 2. LINE Messaging API でメッセージ送信
   const TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  log("LINE_CHANNEL_ACCESS_TOKEN 存在:", !!TOKEN);
+
   if (!TOKEN) {
+    console.error("[POST messages] LINE_CHANNEL_ACCESS_TOKEN が未設定");
     return NextResponse.json({ error: "LINE_CHANNEL_ACCESS_TOKEN が未設定です" }, { status: 500 });
   }
+
+  const payload = {
+    to:       lineUserId,
+    messages: [{ type: "text", text }],
+  };
+  log("送信 payload:", JSON.stringify(payload));
 
   const lineRes = await fetch("https://api.line.me/v2/bot/message/push", {
     method: "POST",
@@ -60,17 +91,23 @@ export async function POST(req: NextRequest, { params }: Params) {
       Authorization:  `Bearer ${TOKEN}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      to:       customer.line_user_id,
-      messages: [{ type: "text", text }],
-    }),
+    body: JSON.stringify(payload),
   });
 
+  const lineResText = await lineRes.text().catch(() => lineRes.statusText);
+  log("LINE API status:", lineRes.status);
+  log("LINE API body:", lineResText);
+
   if (!lineRes.ok) {
-    const detailText = await lineRes.text().catch(() => lineRes.statusText);
-    console.error("[POST /api/customers/[id]/messages] LINE送信失敗", lineRes.status, detailText);
+    console.error(
+      "[POST messages] LINE送信失敗",
+      "customerId:", customerId,
+      "masked_id:", maskedId,
+      "status:", lineRes.status,
+      "body:", lineResText
+    );
     return NextResponse.json(
-      { error: "LINE送信に失敗しました", detail: detailText },
+      { error: "LINE送信に失敗しました", detail: lineResText },
       { status: lineRes.status }
     );
   }
@@ -92,7 +129,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     return NextResponse.json(data, { status: 201 });
   } catch (e) {
-    console.error("[POST /api/customers/[id]/messages]", e);
+    console.error("[POST messages] DB保存失敗 customerId:", customerId, e);
     return NextResponse.json(
       { error: "LINE送信は成功しましたが、履歴保存に失敗しました" },
       { status: 500 }

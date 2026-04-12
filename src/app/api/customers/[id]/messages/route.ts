@@ -27,6 +27,52 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }
 
+  // 1. 顧客の line_user_id を取得
+  const { data: customer, error: customerError } = await supabase
+    .from("customers")
+    .select("line_user_id")
+    .eq("id", customerId)
+    .single();
+
+  if (customerError || !customer) {
+    return NextResponse.json({ error: "顧客が見つかりません" }, { status: 404 });
+  }
+
+  if (!customer.line_user_id) {
+    return NextResponse.json(
+      { error: "LINE IDが設定されていません。顧客詳細でLINE IDを登録してください。" },
+      { status: 400 }
+    );
+  }
+
+  // 2. LINE Messaging API でメッセージ送信
+  const TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  if (!TOKEN) {
+    return NextResponse.json({ error: "LINE_CHANNEL_ACCESS_TOKEN が未設定です" }, { status: 500 });
+  }
+
+  const lineRes = await fetch("https://api.line.me/v2/bot/message/push", {
+    method: "POST",
+    headers: {
+      Authorization:  `Bearer ${TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      to:       customer.line_user_id,
+      messages: [{ type: "text", text }],
+    }),
+  });
+
+  if (!lineRes.ok) {
+    const detail = await lineRes.json().catch(() => ({ message: lineRes.statusText }));
+    console.error("[POST /api/customers/[id]/messages] LINE送信失敗", detail);
+    return NextResponse.json(
+      { error: "LINE送信に失敗しました", detail },
+      { status: lineRes.status }
+    );
+  }
+
+  // 3. LINE送信成功時のみ messages に保存
   try {
     const { data, error } = await supabase
       .from("messages")

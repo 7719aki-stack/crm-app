@@ -167,6 +167,7 @@ export default function CustomerDetailPage() {
   const [replyText,       setReplyText]       = useState("");
   const [replySending,    setReplySending]    = useState(false);
   const [replyError,      setReplyError]      = useState<string | null>(null);
+  const [replySuccess,    setReplySuccess]    = useState(false);
 
   function setLineMessage(text: string) {
     setLineMessageState(text);
@@ -219,18 +220,24 @@ export default function CustomerDetailPage() {
     if (!text) return;
     setReplySending(true);
     setReplyError(null);
+    setReplySuccess(false);
     try {
       const res = await fetch(`/api/customers/${customerId}/messages`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ text }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "送信に失敗しました");
+      }
       const saved: DbMessage = await res.json();
       setDbMessages((prev) => [...prev, saved]);
       setReplyText("");
-    } catch {
-      setReplyError("送信に失敗しました。もう一度お試しください。");
+      setReplySuccess(true);
+      setTimeout(() => setReplySuccess(false), 3000);
+    } catch (e) {
+      setReplyError(e instanceof Error ? e.message : "送信に失敗しました。もう一度お試しください。");
     } finally {
       setReplySending(false);
     }
@@ -453,6 +460,9 @@ export default function CustomerDetailPage() {
               />
               {replyError && (
                 <p className="text-xs text-red-500 font-medium">{replyError}</p>
+              )}
+              {replySuccess && (
+                <p className="text-xs text-green-600 font-medium">✓ LINEに送信しました</p>
               )}
               <button
                 onClick={sendReply}

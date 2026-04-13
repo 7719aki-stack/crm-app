@@ -12,6 +12,10 @@ type Props = {
   tags:         string[];
   value:        string;
   onChange:     (text: string) => void;
+  /** LINE送信パネルで選択中のトーン */
+  tone?:        string;
+  /** LINEユーザーID（未設定の場合は undefined） */
+  lineUserId?:  string;
 };
 
 type CopyState = "idle" | "copied";
@@ -22,6 +26,8 @@ export default function MessageDraftPanel({
   tags,
   value,
   onChange,
+  tone,
+  lineUserId,
 }: Props) {
   const [copyText, setCopyText] = useState<CopyState>("idle");
   const [copyMeta, setCopyMeta] = useState<CopyState>("idle");
@@ -70,7 +76,7 @@ export default function MessageDraftPanel({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* ── 宛先メタ情報 ─────────────────────────────── */}
       <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5 space-y-1.5">
         <div className="flex items-center gap-2">
@@ -132,13 +138,56 @@ export default function MessageDraftPanel({
       </div>
 
       {/* ── ドラフト textarea ─────────────────────────── */}
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={7}
-        placeholder="送信文をここで整えます&#10;返信候補・案内文から「置き換え」「追記」で追加するか、直接入力してください"
-        className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent resize-none placeholder:text-gray-300"
-      />
+      <div>
+        {/* 送信前チェック */}
+        <div className="flex flex-wrap gap-x-4 gap-y-0.5 mb-2">
+          {/* 宛先 */}
+          <span className="inline-flex items-center gap-1 text-[10px]">
+            {lineUserId ? (
+              <>
+                <span className="text-emerald-500 font-bold">✔</span>
+                <span className="text-gray-400">宛先：</span>
+                <span className="text-gray-600 font-medium font-mono truncate max-w-[120px]">{lineUserId}</span>
+              </>
+            ) : (
+              <>
+                <span className="text-amber-400">⚠</span>
+                <span className="text-gray-400">宛先：</span>
+                <span className="text-amber-500 font-medium">LINE ID未設定</span>
+              </>
+            )}
+          </span>
+          {/* トーン */}
+          <span className="inline-flex items-center gap-1 text-[10px]">
+            <span className="text-emerald-500 font-bold">✔</span>
+            <span className="text-gray-400">トーン：</span>
+            <span className="text-gray-600 font-medium">{tone ?? "—"}</span>
+          </span>
+          {/* 文面 */}
+          <span className="inline-flex items-center gap-1 text-[10px]">
+            {value.trim().length > 0 ? (
+              <>
+                <span className="text-emerald-500 font-bold">✔</span>
+                <span className="text-gray-400">文面：</span>
+                <span className="text-gray-600 font-medium">入力済み</span>
+              </>
+            ) : (
+              <>
+                <span className="text-gray-300">⚠</span>
+                <span className="text-gray-300">文面：</span>
+                <span className="text-gray-300">未入力</span>
+              </>
+            )}
+          </span>
+        </div>
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={10}
+          placeholder="送信文をここで整えます&#10;返信候補・案内文から「置き換え」「追記」で追加するか、直接入力してください"
+          className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent resize-none placeholder:text-gray-300"
+        />
+      </div>
 
       {/* ── 文字数 ───────────────────────────────────── */}
       <p className="text-[10px] text-gray-300 text-right -mt-1">
@@ -146,17 +195,17 @@ export default function MessageDraftPanel({
       </p>
 
       {/* ── コピーボタン ─────────────────────────────── */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex items-center gap-2 flex-wrap">
 
           {/* ① 本文のみコピー（line-tool 用メイン） */}
           <button
             onClick={handleCopyText}
             disabled={!hasText}
-            className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
+            className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
               copyText === "copied"
-                ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                : "bg-emerald-600 text-white hover:bg-emerald-700"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-white border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50"
             }`}
           >
             {copyText === "copied" ? (
@@ -244,7 +293,7 @@ export default function MessageDraftPanel({
           {/* 送信画面を開くボタン */}
           <button
             onClick={() => window.open("http://localhost:3100", "_blank")}
-            className="w-full inline-flex items-center justify-center gap-2 text-sm font-bold px-4 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 transition-all shadow-sm"
+            className="w-full inline-flex items-center justify-center gap-2 text-base font-bold px-4 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 transition-all shadow-md hover:shadow-lg"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />

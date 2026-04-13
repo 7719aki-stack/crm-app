@@ -25,11 +25,13 @@ interface Props {
   injectKey?:    number;
   /** ユーザーが textarea を編集（クリア含む）したときに呼ばれるコールバック。新しいテキスト値を渡す */
   onEdit?:       (text: string) => void;
+  /** トーンが変化したときに呼ばれるコールバック */
+  onToneChange?: (tone: Tone) => void;
 }
 
 type Phase = "input" | "confirm" | "sending" | "done" | "error";
 
-export function LineSendPanel({ customerId, line_user_id, onSent, injectText, injectKey, onEdit }: Props) {
+export function LineSendPanel({ customerId, line_user_id, onSent, injectText, injectKey, onEdit, onToneChange }: Props) {
   const [text,         setText]         = useState("");
   const [selectedTone, setSelectedTone] = useState<Tone>("共感");
   const [nextAction,   setNextAction]   = useState("");
@@ -198,6 +200,7 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
                 console.log("tone clicked", tone);
                 // トーンの見た目切替は必ず実行
                 setSelectedTone(tone);
+                onToneChange?.(tone);
                 const tmpl = TONE_TEMPLATES[tone];
                 // 送信文が空のときだけテンプレを注入する（手動入力済みなら上書きしない）
                 if (text.trim() === "") {

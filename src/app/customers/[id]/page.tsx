@@ -175,6 +175,7 @@ export default function CustomerDetailPage() {
   const [aiCandidates,   setAiCandidates]   = useState<string[] | null>(null);
   const [aiLoading,      setAiLoading]      = useState(false);
   const [aiError,        setAiError]        = useState<string | null>(null);
+  const [lineTone,       setLineTone]       = useState("共感");
 
   /** 返信候補・オファー文などの「明示的な注入」。
    *  ユーザーが未編集の場合のみ LineSendPanel にも反映する */
@@ -555,6 +556,7 @@ export default function CustomerDetailPage() {
             <LineSendPanel
               customerId={customer.id}
               line_user_id={line_user_id || undefined}
+              onToneChange={setLineTone}
               onSent={(entry) => {
                 setActions((prev) => [entry, ...prev]);
                 // 送信成功後、下書きをクリアして編集済みフラグをリセット
@@ -823,6 +825,8 @@ export default function CustomerDetailPage() {
               tags={tags}
               value={lineMessage}
               onChange={handleDraftChange}
+              tone={lineTone}
+              lineUserId={line_user_id || undefined}
             />
           </SectionCard>
 

@@ -2,9 +2,18 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { ActionEntry } from "@/app/customers/dummyData";
+import { saveCustomerMessageDraft } from "@/lib/messageDraft";
 
 const TONES = ["共感", "背中押し", "アップセル", "報告受け", "フォロー"] as const;
 type Tone = typeof TONES[number];
+
+const TONE_TEMPLATES: Record<Tone, string> = {
+  "共感":    "さん、そのお気持ちよくわかります。\nまずはゆっくりお話を聞かせてくださいね。",
+  "背中押し": "さん、大丈夫ですよ！\n一歩踏み出すタイミングは今だと感じています。\n一緒に進んでいきましょう。",
+  "アップセル": "さん、今回のご状況、もう少し詳しく視ることができるメニューがございます。\nよかったらご案内しますね。",
+  "報告受け": "ご報告ありがとうございます！\nその後の変化、気にかけていました。\nまたいつでも声をかけてくださいね。",
+  "フォロー": "さん、その後いかがですか？\n気になっていたのでご連絡しました。\nよかったらまたお話しましょう。",
+};
 
 interface Props {
   customerId:    number;
@@ -36,10 +45,16 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
     prevInjectKeyRef.current = injectKey;
     const next = injectText ?? "";
     console.log("[LineSendPanel inject]", "injectKey=", injectKey, "text=", JSON.stringify(next));
-    setText(next);
+    // 外部注入が空のとき → 現在選択中トーンのテンプレを自動セット
+    const resolved = next !== "" ? next : TONE_TEMPLATES[selectedTone];
+    setText(resolved);
+    if (resolved !== next) {
+      // テンプレ注入した場合は localStorage にも同期（親の onEdit は呼ばない = isLineEdited を上げない）
+      saveCustomerMessageDraft(customerId, resolved);
+    }
     // テキストがある場合のみ入力フォームに戻す（空クリア時は done 状態を維持）
-    if (next) setPhase("input");
-  // injectText は依存に含めない: injectKey が変化したときだけ注入するのが正しい挙動
+    if (resolved) setPhase("input");
+  // injectText / selectedTone は依存に含めない: injectKey が変化したときだけ注入するのが正しい挙動
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [injectKey]);
 
@@ -173,7 +188,17 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
           {TONES.map((t) => (
             <button
               key={t}
-              onClick={() => setSelectedTone(t)}
+              onClick={() => {
+                setSelectedTone(t);
+                const tmpl = TONE_TEMPLATES[t];
+                console.log("tone click", { text, tmpl });
+                // 送信文が空のときだけテンプレを注入する（手動入力済みなら上書きしない）
+                if (text.trim() === "") {
+                  setText(tmpl);
+                  saveCustomerMessageDraft(customerId, tmpl);
+                  onEdit?.(tmpl);
+                }
+              }}
               className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                 selectedTone === t
                   ? "bg-brand-600 text-white border-brand-600"

@@ -36,6 +36,11 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
   const [phase,        setPhase]        = useState<Phase>("input");
   const [errorMsg,     setErrorMsg]     = useState("");
 
+  // selectedTone が変化したことを確認するデバッグログ
+  useEffect(() => {
+    console.log("selectedTone changed", selectedTone);
+  }, [selectedTone]);
+
   // injectKey が変化したときだけ注入する。
   // MessageDraftPanel 編集など injectText だけが変わっても injectKey が同じなら再注入しない。
   const prevInjectKeyRef = useRef<number | undefined>(undefined);
@@ -185,13 +190,15 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
       <div>
         <p className="text-[11px] text-gray-400 mb-1.5 font-semibold uppercase tracking-wider">トーン</p>
         <div className="flex flex-wrap gap-1.5">
-          {TONES.map((t) => (
+          {TONES.map((tone) => (
             <button
-              key={t}
+              key={tone}
+              type="button"
               onClick={() => {
-                setSelectedTone(t);
-                const tmpl = TONE_TEMPLATES[t];
-                console.log("tone click", { text, tmpl });
+                console.log("tone clicked", tone);
+                // トーンの見た目切替は必ず実行
+                setSelectedTone(tone);
+                const tmpl = TONE_TEMPLATES[tone];
                 // 送信文が空のときだけテンプレを注入する（手動入力済みなら上書きしない）
                 if (text.trim() === "") {
                   setText(tmpl);
@@ -200,12 +207,12 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
                 }
               }}
               className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                selectedTone === t
+                selectedTone === tone
                   ? "bg-brand-600 text-white border-brand-600"
                   : "bg-white text-gray-500 border-gray-200 hover:border-brand-300"
               }`}
             >
-              {t}
+              {tone}
             </button>
           ))}
         </div>

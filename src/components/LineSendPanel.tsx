@@ -14,8 +14,8 @@ interface Props {
   injectText?:   string;
   /** このキーが変化したときだけ injectText を textarea に反映する */
   injectKey?:    number;
-  /** ユーザーが textarea を編集（クリア含む）したときに呼ばれるコールバック */
-  onEdit?:       () => void;
+  /** ユーザーが textarea を編集（クリア含む）したときに呼ばれるコールバック。新しいテキスト値を渡す */
+  onEdit?:       (text: string) => void;
 }
 
 type Phase = "input" | "confirm" | "sending" | "done" | "error";
@@ -35,10 +35,13 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
     if (injectKey === prevInjectKeyRef.current) return;
     prevInjectKeyRef.current = injectKey;
     const next = injectText ?? "";
+    console.log("[LineSendPanel inject]", "injectKey=", injectKey, "text=", JSON.stringify(next));
     setText(next);
     // テキストがある場合のみ入力フォームに戻す（空クリア時は done 状態を維持）
     if (next) setPhase("input");
-  }, [injectKey, injectText]);
+  // injectText は依存に含めない: injectKey が変化したときだけ注入するのが正しい挙動
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [injectKey]);
 
   async function handleSend() {
     setPhase("sending");
@@ -188,7 +191,7 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
         <p className="text-[11px] text-gray-400 mb-1.5 font-semibold uppercase tracking-wider">送信文</p>
         <textarea
           value={text}
-          onChange={(e) => { setText(e.target.value); onEdit?.(); }}
+          onChange={(e) => { setText(e.target.value); onEdit?.(e.target.value); }}
           rows={5}
           placeholder="送信するメッセージを入力…"
           className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent resize-none placeholder:text-gray-300"

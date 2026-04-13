@@ -179,6 +179,7 @@ export default function CustomerDetailPage() {
   /** 返信候補・オファー文などの「明示的な注入」。
    *  ユーザーが未編集の場合のみ LineSendPanel にも反映する */
   function setLineMessage(text: string) {
+    console.log("[lineMessage set]", "replace", JSON.stringify(text), "isLineEdited=", isLineEdited);
     setLineMessageState(text);
     saveCustomerMessageDraft(customerId, text);
     if (!isLineEdited) {
@@ -187,6 +188,7 @@ export default function CustomerDetailPage() {
   }
   /** MessageDraftPanel の onChange 専用。下書きを保存するが LineSendPanel には再注入しない */
   function handleDraftChange(text: string) {
+    console.log("[lineMessage set]", "draft-change", JSON.stringify(text));
     setLineMessageState(text);
     saveCustomerMessageDraft(customerId, text);
   }
@@ -196,6 +198,7 @@ export default function CustomerDetailPage() {
       const normalize = (s: string) => s.replace(/\r\n/g, "\n").trim().replace(/\s+/g, " ");
       if (normalize(prev).includes(normalize(text))) return prev;
       const next = prev ? `${prev}\n\n${text}` : text;
+      console.log("[lineMessage set]", "append", JSON.stringify(next));
       saveCustomerMessageDraft(customerId, next);
       return next;
     });
@@ -263,6 +266,7 @@ export default function CustomerDetailPage() {
         set_line_user_id_draft(c.line_user_id ?? "");
         setActions(c.actions ?? []);
         const draft = getCustomerMessageDraft(customerId);
+        console.log("[lineMessage set]", "init", JSON.stringify(draft), "customerId=", customerId);
         setLineMessageState(draft);
         // 初回ロード時は常に下書きを注入する（直上で isLineEdited をリセット済み）
         setLineInjectKey((k) => k + 1);
@@ -555,13 +559,23 @@ export default function CustomerDetailPage() {
                 setActions((prev) => [entry, ...prev]);
                 // 送信成功後、下書きをクリアして編集済みフラグをリセット
                 // setLineMessage は使わず直接更新（isLineEdited が true でも確実にクリアするため）
+                console.log("[lineMessage set]", "send-complete", '""');
                 setLineMessageState("");
                 saveCustomerMessageDraft(customerId, "");
                 setIsLineEdited(false);
               }}
               injectText={lineMessage}
               injectKey={lineInjectKey}
-              onEdit={() => setIsLineEdited(true)}
+              onEdit={(text) => {
+                // ユーザーが LINE送信欄を手動編集（空クリア含む）したとき:
+                // 1. 編集済みフラグを立てる（以降の自動上書きを全てブロック）
+                // 2. page 側の lineMessage と localStorage を即時同期する
+                //    → これがないと「空にしてもリロード時に戻る」バグが発生する
+                console.log("[lineMessage set]", "line-panel-edit", JSON.stringify(text));
+                setIsLineEdited(true);
+                setLineMessageState(text);
+                saveCustomerMessageDraft(customerId, text);
+              }}
             />
           </SectionCard>
 

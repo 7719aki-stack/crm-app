@@ -185,6 +185,12 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
     );
   }
 
+  // ── 送信可否判定 ──────────────────────────────────────
+  const hasLineUserId = !!line_user_id;
+  const hasText       = text.trim() !== "";
+  const canSend       = hasLineUserId && hasText;
+  const disabledReason = !hasLineUserId ? "宛先未設定" : !hasText ? "文面未入力" : null;
+
   // ── 入力フォーム ──────────────────────────────────────
   return (
     <div className="space-y-3">
@@ -246,16 +252,20 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
 
       <button
         onClick={() => setPhase("confirm")}
-        disabled={!text.trim()}
-        className="w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        disabled={!canSend}
+        className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+          canSend
+            ? "bg-emerald-600 text-white hover:bg-emerald-700"
+            : "bg-gray-200 text-gray-400 cursor-not-allowed"
+        }`}
       >
         確認する →
       </button>
 
-      {line_user_id ? (
-        <p className="text-[10px] text-gray-400 text-center font-mono truncate">送信先: {line_user_id}</p>
+      {disabledReason ? (
+        <p className="text-[10px] text-red-400 text-center">{disabledReason}</p>
       ) : (
-        <p className="text-[10px] text-amber-500 text-center">LINE ID 未設定 — テスト用 ID に送信されます</p>
+        <p className="text-[10px] text-gray-400 text-center font-mono truncate">送信先: {line_user_id}</p>
       )}
     </div>
   );

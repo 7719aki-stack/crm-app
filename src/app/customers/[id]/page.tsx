@@ -557,6 +557,8 @@ export default function CustomerDetailPage() {
               customerId={customer.id}
               line_user_id={line_user_id || undefined}
               onToneChange={setLineTone}
+              customerTags={tags}
+              customerStatus={status}
               onSent={(entry) => {
                 setActions((prev) => [entry, ...prev]);
                 // 送信成功後、下書きをクリアして編集済みフラグをリセット

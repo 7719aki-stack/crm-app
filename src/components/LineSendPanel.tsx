@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { ActionEntry } from "@/app/customers/dummyData";
 import { saveCustomerMessageDraft } from "@/lib/messageDraft";
+import { generateAdaptiveDraft, type DraftCandidate } from "@/lib/generateAdaptiveDraft";
 
 const TONES = ["共感", "背中押し", "アップセル", "報告受け", "フォロー"] as const;
 type Tone = typeof TONES[number];
@@ -27,16 +28,24 @@ interface Props {
   onEdit?:       (text: string) => void;
   /** トーンが変化したときに呼ばれるコールバック */
   onToneChange?: (tone: Tone) => void;
+  /** 下書き生成に使う顧客タグ */
+  customerTags?:   string[];
+  /** 下書き生成に使う顧客ステータス（StatusId文字列） */
+  customerStatus?: string;
 }
 
 type Phase = "input" | "confirm" | "sending" | "done" | "error";
+type DraftConfirmMode = "replace" | "append" | null;
 
-export function LineSendPanel({ customerId, line_user_id, onSent, injectText, injectKey, onEdit, onToneChange }: Props) {
-  const [text,         setText]         = useState("");
-  const [selectedTone, setSelectedTone] = useState<Tone>("共感");
-  const [nextAction,   setNextAction]   = useState("");
-  const [phase,        setPhase]        = useState<Phase>("input");
-  const [errorMsg,     setErrorMsg]     = useState("");
+export function LineSendPanel({ customerId, line_user_id, onSent, injectText, injectKey, onEdit, onToneChange, customerTags, customerStatus }: Props) {
+  const [text,              setText]              = useState("");
+  const [selectedTone,      setSelectedTone]      = useState<Tone>("共感");
+  const [nextAction,        setNextAction]         = useState("");
+  const [phase,             setPhase]             = useState<Phase>("input");
+  const [errorMsg,          setErrorMsg]          = useState("");
+  const [draftCandidates,   setDraftCandidates]   = useState<DraftCandidate[]>([]);
+  const [draftConfirm,      setDraftConfirm]      = useState<DraftConfirmMode>(null);
+  const [pendingDraftText,  setPendingDraftText]  = useState("");
 
   // selectedTone が変化したことを確認するデバッグログ
   useEffect(() => {
@@ -113,6 +122,46 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
     setNextAction("");
     setPhase("input");
     setErrorMsg("");
+    setDraftCandidates([]);
+    setDraftConfirm(null);
+    setPendingDraftText("");
+  }
+
+  // ── 下書き生成 ────────────────────────────────────────────
+  function handleGenerateDraft() {
+    const candidates = generateAdaptiveDraft({
+      tone:   selectedTone,
+      tags:   customerTags  ?? [],
+      status: customerStatus ?? "",
+    });
+    setDraftCandidates(candidates);
+  }
+
+  /** 候補テキストを「置き換え」または「追記」でtextareaに適用する */
+  function applyDraft(draftText: string, mode: "replace" | "append") {
+    let next: string;
+    if (mode === "replace") {
+      next = draftText;
+    } else {
+      next = text ? `${text}\n\n${draftText}` : draftText;
+    }
+    setText(next);
+    saveCustomerMessageDraft(customerId, next);
+    onEdit?.(next);
+    setDraftCandidates([]);
+    setDraftConfirm(null);
+    setPendingDraftText("");
+    setPhase("input");
+  }
+
+  /** 「下書きを作成」ボタンの1クリック目：既存テキストがあれば確認、なければ即適用 */
+  function handleSelectDraft(draftText: string) {
+    if (text.trim()) {
+      setPendingDraftText(draftText);
+      setDraftConfirm("replace");
+    } else {
+      applyDraft(draftText, "replace");
+    }
   }
 
   // ── 送信完了 ──────────────────────────────────────────
@@ -208,16 +257,16 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
               type="button"
               onClick={() => {
                 console.log("tone clicked", tone);
-                // トーンの見た目切替は必ず実行
                 setSelectedTone(tone);
                 onToneChange?.(tone);
                 const tmpl = TONE_TEMPLATES[tone];
-                // 送信文が空のときだけテンプレを注入する（手動入力済みなら上書きしない）
                 if (text.trim() === "") {
                   setText(tmpl);
                   saveCustomerMessageDraft(customerId, tmpl);
                   onEdit?.(tmpl);
                 }
+                // トーンが変わったら候補をリセット
+                setDraftCandidates([]);
               }}
               className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                 selectedTone === tone
@@ -231,6 +280,103 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
         </div>
       </div>
 
+      {/* ── 下書きを作成ボタン ──────────────────────────── */}
+      <div>
+        <button
+          type="button"
+          onClick={handleGenerateDraft}
+          className="w-full py-2.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 text-sm font-semibold hover:bg-brand-100 hover:border-brand-400 transition-colors flex items-center justify-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          このトーンで下書きを作成
+        </button>
+        <p className="text-[10px] text-gray-400 mt-1 text-center">
+          ローカル提案モード — トーン・タグ・ステータスから3案を生成します
+        </p>
+      </div>
+
+      {/* ── 生成された下書き候補 ────────────────────────── */}
+      {draftCandidates.length > 0 && (
+        <div className="rounded-lg border border-brand-100 bg-gradient-to-b from-brand-50/60 to-white p-3 space-y-3">
+          <p className="text-[11px] font-semibold text-brand-600 uppercase tracking-wider">
+            生成された下書き — 選んで適用してください
+          </p>
+          {draftCandidates.map((c) => (
+            <div key={c.strength} className="rounded-lg border border-gray-100 bg-white p-3 space-y-2 shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  c.strength === "gentle"
+                    ? "bg-sky-50 text-sky-600 border border-sky-100"
+                    : c.strength === "standard"
+                    ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                    : "bg-amber-50 text-amber-600 border border-amber-100"
+                }`}>
+                  {c.label}
+                </span>
+              </div>
+              <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{c.text}</p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleSelectDraft(c.text)}
+                  className="flex-1 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors"
+                >
+                  置き換え
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyDraft(c.text, "append")}
+                  className="flex-1 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:border-gray-300 hover:bg-gray-50 transition-colors"
+                >
+                  追記
+                </button>
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setDraftCandidates([])}
+            className="w-full text-[11px] text-gray-400 hover:text-gray-500 transition-colors"
+          >
+            閉じる
+          </button>
+        </div>
+      )}
+
+      {/* ── 既存テキストへの置き換え確認ダイアログ ──── */}
+      {draftConfirm !== null && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-2.5">
+          <p className="text-xs font-semibold text-amber-800">
+            送信文に文章が入っています。どうしますか？
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => applyDraft(pendingDraftText, "replace")}
+              className="flex-1 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition-colors"
+            >
+              置き換え
+            </button>
+            <button
+              type="button"
+              onClick={() => applyDraft(pendingDraftText, "append")}
+              className="flex-1 py-1.5 rounded-lg border border-amber-300 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-colors"
+            >
+              追記
+            </button>
+            <button
+              type="button"
+              onClick={() => { setDraftConfirm(null); setPendingDraftText(""); }}
+              className="flex-1 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-xs hover:border-gray-300 transition-colors"
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* メッセージ入力 */}
       <div>
         <p className="text-[11px] text-gray-400 mb-1.5 font-semibold uppercase tracking-wider">送信文</p>
@@ -238,7 +384,7 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
           value={text}
           onChange={(e) => { setText(e.target.value); onEdit?.(e.target.value); }}
           rows={5}
-          placeholder="送信するメッセージを入力…"
+          placeholder="送信するメッセージを入力…&#10;または上の「下書きを作成」から生成してください"
           className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent resize-none placeholder:text-gray-300"
         />
       </div>

@@ -178,6 +178,8 @@ export default function CustomerDetailPage() {
   }
   function appendLineMessage(text: string) {
     setLineMessageState((prev) => {
+      // 既に同じ内容が含まれている場合は重複追記しない
+      if (prev.includes(text)) return prev;
       const next = prev ? `${prev}\n\n${text}` : text;
       saveCustomerMessageDraft(customerId, next);
       return next;
@@ -196,9 +198,11 @@ export default function CustomerDetailPage() {
       const data = await res.json() as {
         candidates?: Array<{ label: string; text: string }>;
         error?: string;
+        detail?: string;
       };
       if (!res.ok) {
-        throw new Error(data.error ?? "AI生成に失敗しました");
+        const msg = data.error ?? "AI生成に失敗しました";
+        throw new Error(data.detail ? `${msg}\n${data.detail}` : msg);
       }
       if (!Array.isArray(data.candidates) || data.candidates.length === 0) {
         throw new Error("AI返信候補を取得できませんでした");
@@ -522,7 +526,11 @@ export default function CustomerDetailPage() {
             <LineSendPanel
               customerId={customer.id}
               line_user_id={line_user_id || undefined}
-              onSent={(entry) => setActions((prev) => [entry, ...prev])}
+              onSent={(entry) => {
+                setActions((prev) => [entry, ...prev]);
+                // 送信成功後、LINE送信欄の下書きをクリア
+                setLineMessage("");
+              }}
               injectText={lineMessage}
             />
           </SectionCard>

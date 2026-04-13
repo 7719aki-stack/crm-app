@@ -104,6 +104,13 @@ ${messageHistory || "（履歴なし）"}
 }`;
 
   // ── 5. OpenAI API 呼び出し ───────────────────────────
+  const MODEL = "gpt-4o-mini";
+  console.log("[reply-suggestions] calling OpenAI", {
+    model:      MODEL,
+    hasApiKey:  !!apiKey,
+    customerId,
+  });
+
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -112,7 +119,7 @@ ${messageHistory || "（履歴なし）"}
         "Content-Type":  "application/json",
       },
       body: JSON.stringify({
-        model:      "gpt-4o-mini",
+        model:      MODEL,
         max_tokens: 1024,
         messages: [
           { role: "system", content: systemPrompt },
@@ -123,9 +130,22 @@ ${messageHistory || "（履歴なし）"}
 
     if (!res.ok) {
       const errBody = await res.text();
-      console.error("[reply-suggestions] OpenAI API error:", res.status, errBody);
+      console.error("[reply-suggestions] OpenAI API error", {
+        status:    res.status,
+        model:     MODEL,
+        hasApiKey: !!apiKey,
+        body:      errBody,
+      });
+      let detail = `OpenAI status=${res.status}`;
+      try {
+        const parsed = JSON.parse(errBody) as { error?: { message?: string } };
+        if (parsed.error?.message) detail = parsed.error.message;
+      } catch { /* raw text */ }
       return NextResponse.json(
-        { error: "AI生成に失敗しました。しばらくしてから再試行してください。" },
+        {
+          error:  "AI生成に失敗しました。しばらくしてから再試行してください。",
+          detail,
+        },
         { status: 500 }
       );
     }
@@ -159,9 +179,13 @@ ${messageHistory || "（履歴なし）"}
 
     return NextResponse.json({ candidates });
   } catch (e) {
-    console.error("[reply-suggestions] OpenAI API error:", e);
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error("[reply-suggestions] unexpected error", { model: MODEL, hasApiKey: !!apiKey, detail });
     return NextResponse.json(
-      { error: "AI生成に失敗しました。しばらくしてから再試行してください。" },
+      {
+        error:  "AI生成に失敗しました。しばらくしてから再試行してください。",
+        detail,
+      },
       { status: 500 }
     );
   }

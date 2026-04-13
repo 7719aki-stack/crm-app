@@ -27,7 +27,10 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText }: 
   useEffect(() => {
     if (injectText === undefined) return;
     setText(injectText);
-    setPhase("input"); // confirm 中でも入力フォームに戻す
+    // テキストがある場合のみ入力フォームに戻す（空クリア時は done 状態を維持）
+    if (injectText) {
+      setPhase("input");
+    }
   }, [injectText]);
 
   async function handleSend() {

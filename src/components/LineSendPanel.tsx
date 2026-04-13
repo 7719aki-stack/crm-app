@@ -189,7 +189,11 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
   const hasLineUserId = !!line_user_id;
   const hasText       = text.trim() !== "";
   const canSend       = hasLineUserId && hasText;
-  const disabledReason = !hasLineUserId ? "宛先未設定" : !hasText ? "文面未入力" : null;
+  const disabledReason = !hasLineUserId
+    ? "送信先の LINE ID が設定されていません"
+    : !hasText
+    ? "送信するメッセージを入力してください"
+    : null;
 
   // ── 入力フォーム ──────────────────────────────────────
   return (
@@ -263,7 +267,7 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
       </button>
 
       {disabledReason ? (
-        <p className="text-[10px] text-red-400 text-center">{disabledReason}</p>
+        <p className="text-sm text-red-500 text-center">{disabledReason}</p>
       ) : (
         <p className="text-[10px] text-gray-400 text-center font-mono truncate">送信先: {line_user_id}</p>
       )}

@@ -17,10 +17,10 @@ export async function POST(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY が設定されていません" },
+      { error: "OPENAI_API_KEY が設定されていません" },
       { status: 500 }
     );
   }
@@ -103,28 +103,27 @@ ${messageHistory || "（履歴なし）"}
   ]
 }`;
 
-  // ── 5. Claude API 呼び出し ────────────────────────────
+  // ── 5. OpenAI API 呼び出し ───────────────────────────
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key":         apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type":      "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type":  "application/json",
       },
       body: JSON.stringify({
-        model:      "claude-sonnet-4-6",
+        model:      "gpt-4o-mini",
         max_tokens: 1024,
-        system:     systemPrompt,
         messages: [
-          { role: "user", content: userPrompt },
+          { role: "system", content: systemPrompt },
+          { role: "user",   content: userPrompt },
         ],
       }),
     });
 
     if (!res.ok) {
       const errBody = await res.text();
-      console.error("[reply-suggestions] Claude API error:", res.status, errBody);
+      console.error("[reply-suggestions] OpenAI API error:", res.status, errBody);
       return NextResponse.json(
         { error: "AI生成に失敗しました。しばらくしてから再試行してください。" },
         { status: 500 }
@@ -132,14 +131,16 @@ ${messageHistory || "（履歴なし）"}
     }
 
     const data = await res.json() as {
-      content: Array<{ type: string; text: string }>;
+      choices: Array<{ message: { content: string } }>;
     };
 
-    const rawText = data.content.find((b) => b.type === "text")?.text ?? "{}";
+    const rawText = data.choices?.[0]?.message?.content ?? "{}";
 
     let parsed: { candidates?: ReplySuggestion[] };
     try {
-      parsed = JSON.parse(rawText) as { candidates?: ReplySuggestion[] };
+      // コードブロック（```json ... ```）が含まれる場合も除去
+      const cleaned = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+      parsed = JSON.parse(cleaned) as { candidates?: ReplySuggestion[] };
     } catch {
       console.error("[reply-suggestions] JSON parse error:", rawText);
       return NextResponse.json(
@@ -158,7 +159,7 @@ ${messageHistory || "（履歴なし）"}
 
     return NextResponse.json({ candidates });
   } catch (e) {
-    console.error("[reply-suggestions] Claude API error:", e);
+    console.error("[reply-suggestions] OpenAI API error:", e);
     return NextResponse.json(
       { error: "AI生成に失敗しました。しばらくしてから再試行してください。" },
       { status: 500 }

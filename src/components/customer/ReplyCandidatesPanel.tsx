@@ -17,9 +17,11 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [appendedIndex, setAppendedIndex] = useState<number | null>(null);
 
-  // タグ変更で候補リストが変わったら選択ハイライトをリセット
+  // 候補リストが変わったら全ハイライト・フラグをリセット
   useEffect(() => {
     setSelectedIndex(null);
+    setAppendedIndex(null);
+    setCopiedIndex(null);
   }, [candidates]);
 
   const handleCopy = async (text: string, index: number) => {

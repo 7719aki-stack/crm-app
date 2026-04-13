@@ -186,6 +186,7 @@ export default function CustomerDetailPage() {
 
   // ── AI返信候補生成 ────────────────────────────────────────
   async function generateAiReplies() {
+    setAiCandidates(null);
     setAiLoading(true);
     setAiError(null);
     try {

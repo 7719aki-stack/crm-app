@@ -164,6 +164,10 @@ export default function CustomerDetailPage() {
   const [savingTags,      setSavingTags]      = useState(false);
   const [scenarioRefreshKey, setScenarioRefreshKey] = useState(0);
   const [lineMessage,     setLineMessageState] = useState("");
+  const [lineInjectKey,   setLineInjectKey]   = useState(0);
+  /** ユーザーが LINE送信欄 textarea を一度でも編集したら true。
+   *  true のときは injectKey をインクリメントしない → 自動上書きしない */
+  const [isLineEdited,    setIsLineEdited]    = useState(false);
   const [replyText,       setReplyText]       = useState("");
   const [replySending,    setReplySending]    = useState(false);
   const [replyError,      setReplyError]      = useState<string | null>(null);
@@ -172,18 +176,33 @@ export default function CustomerDetailPage() {
   const [aiLoading,      setAiLoading]      = useState(false);
   const [aiError,        setAiError]        = useState<string | null>(null);
 
+  /** 返信候補・オファー文などの「明示的な注入」。
+   *  ユーザーが未編集の場合のみ LineSendPanel にも反映する */
   function setLineMessage(text: string) {
+    setLineMessageState(text);
+    saveCustomerMessageDraft(customerId, text);
+    if (!isLineEdited) {
+      setLineInjectKey((k) => k + 1);
+    }
+  }
+  /** MessageDraftPanel の onChange 専用。下書きを保存するが LineSendPanel には再注入しない */
+  function handleDraftChange(text: string) {
     setLineMessageState(text);
     saveCustomerMessageDraft(customerId, text);
   }
   function appendLineMessage(text: string) {
     setLineMessageState((prev) => {
-      // 既に同じ内容が含まれている場合は重複追記しない
-      if (prev.includes(text)) return prev;
+      // 改行・先頭末尾空白を正規化して重複判定（\r\n / \n の差異も吸収）
+      const normalize = (s: string) => s.replace(/\r\n/g, "\n").trim().replace(/\s+/g, " ");
+      if (normalize(prev).includes(normalize(text))) return prev;
       const next = prev ? `${prev}\n\n${text}` : text;
       saveCustomerMessageDraft(customerId, next);
       return next;
     });
+    // ユーザーが未編集の場合のみ LineSendPanel に反映する
+    if (!isLineEdited) {
+      setLineInjectKey((k) => k + 1);
+    }
   }
 
   // ── AI返信候補生成 ────────────────────────────────────────
@@ -219,6 +238,9 @@ export default function CustomerDetailPage() {
 
   // ── データ取得 ──────────────────────────────────────────
   useEffect(() => {
+    // 顧客が切り替わったら編集済みフラグをリセットして新顧客の下書きを注入できるようにする
+    setIsLineEdited(false);
+
     if (isNaN(customerId)) {
       setNotFound(true);
       setLoading(false);
@@ -240,7 +262,10 @@ export default function CustomerDetailPage() {
         set_line_user_id(c.line_user_id ?? "");
         set_line_user_id_draft(c.line_user_id ?? "");
         setActions(c.actions ?? []);
-        setLineMessageState(getCustomerMessageDraft(customerId));
+        const draft = getCustomerMessageDraft(customerId);
+        setLineMessageState(draft);
+        // 初回ロード時は常に下書きを注入する（直上で isLineEdited をリセット済み）
+        setLineInjectKey((k) => k + 1);
       }
       setDbMessages(msgs ?? []);
       setLoading(false);
@@ -528,10 +553,15 @@ export default function CustomerDetailPage() {
               line_user_id={line_user_id || undefined}
               onSent={(entry) => {
                 setActions((prev) => [entry, ...prev]);
-                // 送信成功後、LINE送信欄の下書きをクリア
-                setLineMessage("");
+                // 送信成功後、下書きをクリアして編集済みフラグをリセット
+                // setLineMessage は使わず直接更新（isLineEdited が true でも確実にクリアするため）
+                setLineMessageState("");
+                saveCustomerMessageDraft(customerId, "");
+                setIsLineEdited(false);
               }}
               injectText={lineMessage}
+              injectKey={lineInjectKey}
+              onEdit={() => setIsLineEdited(true)}
             />
           </SectionCard>
 
@@ -778,7 +808,7 @@ export default function CustomerDetailPage() {
               customerId={customer.id}
               tags={tags}
               value={lineMessage}
-              onChange={setLineMessage}
+              onChange={handleDraftChange}
             />
           </SectionCard>
 

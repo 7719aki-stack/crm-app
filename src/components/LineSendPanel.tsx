@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ActionEntry } from "@/app/customers/dummyData";
 
 const TONES = ["共感", "背中押し", "アップセル", "報告受け", "フォロー"] as const;
@@ -10,28 +10,35 @@ interface Props {
   customerId:    number;
   line_user_id?: string;
   onSent:        (entry: ActionEntry) => void;
-  /** 外部から注入するテキスト（返信候補選択時など）。変化するたびに入力欄に反映 */
+  /** 外部から注入するテキスト（返信候補選択時など） */
   injectText?:   string;
+  /** このキーが変化したときだけ injectText を textarea に反映する */
+  injectKey?:    number;
+  /** ユーザーが textarea を編集（クリア含む）したときに呼ばれるコールバック */
+  onEdit?:       () => void;
 }
 
 type Phase = "input" | "confirm" | "sending" | "done" | "error";
 
-export function LineSendPanel({ customerId, line_user_id, onSent, injectText }: Props) {
+export function LineSendPanel({ customerId, line_user_id, onSent, injectText, injectKey, onEdit }: Props) {
   const [text,         setText]         = useState("");
   const [selectedTone, setSelectedTone] = useState<Tone>("共感");
   const [nextAction,   setNextAction]   = useState("");
   const [phase,        setPhase]        = useState<Phase>("input");
   const [errorMsg,     setErrorMsg]     = useState("");
 
-  // 返信候補などの外部テキストが変化したら入力欄に反映（手動編集は引き続き可能）
+  // injectKey が変化したときだけ注入する。
+  // MessageDraftPanel 編集など injectText だけが変わっても injectKey が同じなら再注入しない。
+  const prevInjectKeyRef = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (injectText === undefined) return;
-    setText(injectText);
+    if (injectKey === undefined) return;
+    if (injectKey === prevInjectKeyRef.current) return;
+    prevInjectKeyRef.current = injectKey;
+    const next = injectText ?? "";
+    setText(next);
     // テキストがある場合のみ入力フォームに戻す（空クリア時は done 状態を維持）
-    if (injectText) {
-      setPhase("input");
-    }
-  }, [injectText]);
+    if (next) setPhase("input");
+  }, [injectKey, injectText]);
 
   async function handleSend() {
     setPhase("sending");
@@ -181,7 +188,7 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText }: 
         <p className="text-[11px] text-gray-400 mb-1.5 font-semibold uppercase tracking-wider">送信文</p>
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => { setText(e.target.value); onEdit?.(); }}
           rows={5}
           placeholder="送信するメッセージを入力…"
           className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent resize-none placeholder:text-gray-300"

@@ -12,6 +12,12 @@ type Props = {
   salesStartIndex?: number;
 };
 
+/** 候補テキスト先頭の【ラベル】を抽出。なければ「候補 N」を返す */
+function extractLabel(text: string, index: number): string {
+  const match = text.match(/^【(.+?)】/);
+  return match ? match[1] : `候補 ${index + 1}`;
+}
+
 export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, salesStartIndex }: Props) {
   const [copiedIndex,   setCopiedIndex]   = useState<number | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -43,32 +49,68 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
   const handleAppend = (text: string, index: number) => {
     onAppend?.(text);
     setAppendedIndex(index);
+    setSelectedIndex(index);
     setTimeout(() => setAppendedIndex(null), 1500);
   };
 
+  const selectedLabel =
+    selectedIndex !== null ? extractLabel(candidates[selectedIndex], selectedIndex) : null;
+
   return (
     <div className="space-y-2.5">
+      {/* 現在選択中バナー */}
+      {selectedLabel !== null ? (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-50 border border-purple-200">
+          <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="text-xs font-semibold text-purple-700">
+            現在選択中：{selectedLabel}
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-50 border border-gray-100">
+          <span className="text-xs text-gray-400">
+            「置き換え」または「追記」で候補を選択してください
+          </span>
+        </div>
+      )}
+
       {candidates.map((text, i) => {
         const isSelected = selectedIndex === i;
-        const isSales =
-          salesStartIndex !== undefined && i >= salesStartIndex;
+        const isSales = salesStartIndex !== undefined && i >= salesStartIndex;
         return (
           <div
             key={i}
-            className={`rounded-lg border px-3.5 py-3 transition-colors ${
+            className={`relative rounded-lg px-3.5 py-3 transition-all ${
               isSelected
-                ? "border-brand-300 bg-brand-50"
+                ? "border-2 border-purple-500 bg-purple-50 shadow-md"
                 : isSales
-                ? "border-amber-200 bg-amber-50"
-                : "border-gray-100 bg-gray-50"
+                ? "border border-amber-200 bg-amber-50"
+                : "border border-gray-200 bg-white"
             }`}
           >
-            {isSales && (
+            {/* 選択中チェックマーク（右上） */}
+            {isSelected && (
+              <span className="absolute top-2 right-2 inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-500">
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+            )}
+
+            {isSales && !isSelected && (
               <span className="inline-block text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full mb-2">
                 提案文
               </span>
             )}
-            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mb-2.5">
+            {isSales && isSelected && (
+              <span className="inline-block text-[10px] font-semibold text-purple-600 bg-purple-100 border border-purple-200 px-1.5 py-0.5 rounded-full mb-2">
+                提案文（選択中）
+              </span>
+            )}
+
+            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mb-2.5 pr-6">
               {text}
             </p>
             <div className="flex items-center gap-2 flex-wrap">
@@ -78,8 +120,8 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
                   onClick={() => handleSelect(text, i)}
                   className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
                     isSelected
-                      ? "bg-brand-600 text-white"
-                      : "bg-white border border-gray-200 text-gray-500 hover:border-brand-400 hover:text-brand-600"
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "bg-white border border-gray-200 text-gray-500 hover:border-purple-400 hover:text-purple-600"
                   }`}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -112,7 +154,7 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
                 className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
                   copiedIndex === i
                     ? "bg-emerald-100 text-emerald-700"
-                    : "bg-white border border-gray-200 text-gray-500 hover:border-brand-300 hover:text-brand-600"
+                    : "bg-white border border-gray-200 text-gray-500 hover:border-purple-300 hover:text-purple-600"
                 }`}
               >
                 {copiedIndex === i ? (

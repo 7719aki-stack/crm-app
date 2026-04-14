@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 type Props = {
   candidates: string[];
@@ -23,11 +23,20 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [appendedIndex, setAppendedIndex] = useState<number | null>(null);
 
-  // 候補リストが変わったら全ハイライト・フラグをリセット
+  // onSelect を ref に同期して useEffect 内の stale closure を回避する
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => { onSelectRef.current = onSelect; });
+
+  // 候補リストが変わったら最初の候補を自動選択し textarea に反映する
   useEffect(() => {
-    setSelectedIndex(null);
-    setAppendedIndex(null);
     setCopiedIndex(null);
+    setAppendedIndex(null);
+    if (candidates.length > 0) {
+      setSelectedIndex(0);
+      onSelectRef.current?.(candidates[0]);
+    } else {
+      setSelectedIndex(null);
+    }
   }, [candidates]);
 
   const handleCopy = async (text: string, index: number) => {

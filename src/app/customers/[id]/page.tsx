@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
@@ -332,6 +332,12 @@ export default function CustomerDetailPage() {
     setEditLineId(false);
     setSavingLineId(false);
   }
+
+  // ── 返信候補（安定した参照を保つことで ReplyCandidatesPanel の自動選択が正しく動く）
+  const replyCandidates = useMemo(
+    () => aiCandidates ?? generateReplyCandidates(tags),
+    [aiCandidates, tags]
+  );
 
   // ── ローディング / エラー ─────────────────────────────────
   if (loading) {
@@ -785,17 +791,12 @@ export default function CustomerDetailPage() {
             {aiError && (
               <p className="text-xs text-red-500 mb-2">{aiError}</p>
             )}
-            {(() => {
-              const candidates = aiCandidates ?? generateReplyCandidates(tags);
-              return (
-                <ReplyCandidatesPanel
-                  candidates={candidates}
-                  onSelect={(text) => setLineMessage(text)}
-                  onAppend={(text) => appendLineMessage(text)}
-                  salesStartIndex={aiCandidates ? undefined : candidates.length - 1}
-                />
-              );
-            })()}
+            <ReplyCandidatesPanel
+              candidates={replyCandidates}
+              onSelect={(text) => setLineMessage(text)}
+              onAppend={(text) => appendLineMessage(text)}
+              salesStartIndex={aiCandidates ? undefined : replyCandidates.length - 1}
+            />
           </SectionCard>
 
           {/* おすすめ商品 */}

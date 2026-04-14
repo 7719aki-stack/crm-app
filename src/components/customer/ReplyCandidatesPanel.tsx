@@ -99,6 +99,9 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
           )}
         </div>
 
+        {/* おすすめ理由 */}
+        <p className="text-sm text-gray-600 mt-2 mb-2">最も反応率が高い文章です</p>
+
         {/* 本文 */}
         <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap mb-3">
           {mainText}
@@ -132,7 +135,7 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
-                  このまま送信
+                  この内容で送信する（おすすめ）
                 </>
               )}
             </button>
@@ -193,7 +196,7 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
             return (
               <div
                 key={i}
-                className="rounded-lg border border-gray-200 bg-white px-3.5 py-2.5"
+                className="rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 opacity-80 hover:opacity-100 transition-opacity"
               >
                 <div className="flex items-start gap-3">
                   {/* 本文（左側） */}

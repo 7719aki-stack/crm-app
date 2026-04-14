@@ -19,9 +19,10 @@ function extractLabel(text: string, index: number): string {
 }
 
 export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, salesStartIndex }: Props) {
-  const [copiedIndex,   setCopiedIndex]   = useState<number | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [appendedIndex, setAppendedIndex] = useState<number | null>(null);
+  const [copiedIndex,    setCopiedIndex]    = useState<number | null>(null);
+  const [selectedIndex,  setSelectedIndex]  = useState<number | null>(null);
+  const [appendedIndex,  setAppendedIndex]  = useState<number | null>(null);
+  const [sendConfirmed,  setSendConfirmed]  = useState(false);
 
   // onSelect を ref に同期して useEffect 内の stale closure を回避する
   const onSelectRef = useRef(onSelect);
@@ -31,6 +32,7 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
   useEffect(() => {
     setCopiedIndex(null);
     setAppendedIndex(null);
+    setSendConfirmed(false);
     if (candidates.length > 0) {
       setSelectedIndex(0);
       onSelectRef.current?.(candidates[0]);
@@ -53,7 +55,9 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
     onSelect?.(text);
     setSelectedIndex(index);
     setAppendedIndex(null);
+    setSendConfirmed(false);
   };
+
 
   const handleAppend = (text: string, index: number) => {
     onAppend?.(text);
@@ -80,14 +84,13 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
       {/* ── メイン候補（大きく・強調） ───────────────────── */}
       <div className="relative rounded-xl border-2 border-purple-500 bg-purple-50 shadow-md px-4 py-3.5">
 
+        {/* 右上「おすすめ」バッジ */}
+        <span className="absolute top-3 right-3 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded">
+          おすすめ
+        </span>
+
         {/* ラベル行（左上） */}
-        <div className="flex items-center gap-1.5 mb-2.5">
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-100 border border-purple-300 px-2 py-0.5 rounded-full">
-            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            おすすめ
-          </span>
+        <div className="flex items-center gap-1.5 mb-2.5 pr-20">
           <span className="text-[10px] font-semibold text-purple-500">{mainLabel}</span>
           {isSalesMain && (
             <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">
@@ -103,6 +106,38 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
 
         {/* ボタン群 */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* このまま送信 CTA */}
+          {onSelect && (
+            <button
+              onClick={() => {
+                onSelect(mainText);
+                setSendConfirmed(true);
+                setTimeout(() => setSendConfirmed(false), 2000);
+              }}
+              className={`inline-flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-lg transition-all ${
+                sendConfirmed
+                  ? "bg-green-500 text-white"
+                  : "bg-green-600 text-white hover:bg-green-700 active:bg-green-800"
+              }`}
+            >
+              {sendConfirmed ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  送信文に反映済み
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  このまま送信
+                </>
+              )}
+            </button>
+          )}
+
           {onAppend && (
             <button
               onClick={() => handleAppend(mainText, mainIndex)}
@@ -158,7 +193,7 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
             return (
               <div
                 key={i}
-                className="rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5"
+                className="rounded-lg border border-gray-200 bg-white px-3.5 py-2.5"
               >
                 <div className="flex items-start gap-3">
                   {/* 本文（左側） */}

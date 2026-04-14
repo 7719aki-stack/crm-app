@@ -81,6 +81,8 @@ export type OfferProduct = {
   offerType: "core" | "quick" | "deep" | "premium";
   recommendedTags?: string[];
   paymentUrl: string;
+  /** おすすめ理由（カード表示用・任意） */
+  reason?: string;
 };
 
 export const PRICE_PRESETS_KEY = "crm_price_presets_v1";
@@ -108,6 +110,7 @@ export const OFFER_PRODUCTS: OfferProduct[] = [
     price: 5000,
     type: "main",
     offerType: "core",
+    reason: "まず全体像を把握したい方に向いています",
     paymentUrl: "https://luna-gemnia.stores.jp/items/69c9d1d66b5929170db358ef",
   },
   {
@@ -117,6 +120,7 @@ export const OFFER_PRODUCTS: OfferProduct[] = [
     type: "upsell",
     offerType: "quick",
     recommendedTags: ["片思い・進展"],
+    reason: "片思いや進展が止まっている方に最適です",
     paymentUrl: "https://luna-gemnia.stores.jp/items/69c9ee41fc56600ef2a59d98",
   },
   {
@@ -126,6 +130,7 @@ export const OFFER_PRODUCTS: OfferProduct[] = [
     type: "upsell",
     offerType: "deep",
     recommendedTags: ["復縁", "不倫・複雑愛"],
+    reason: "復縁や複雑愛の深掘りに向いています",
     paymentUrl: "https://luna-gemnia.stores.jp/items/69c9f0dec56f4807d15885ac",
   },
   {
@@ -135,6 +140,7 @@ export const OFFER_PRODUCTS: OfferProduct[] = [
     type: "upsell",
     offerType: "deep",
     recommendedTags: ["不倫・複雑愛", "復縁"],
+    reason: "今の状況を根本から変えたい方におすすめです",
     paymentUrl: "https://luna-gemnia.stores.jp/items/69c9e3704adc3284c8b022fe",
   },
   {
@@ -144,6 +150,7 @@ export const OFFER_PRODUCTS: OfferProduct[] = [
     type: "upsell",
     offerType: "premium",
     recommendedTags: ["復縁"],
+    reason: "本気で関係を逆転させたい方の最上位コースです",
     paymentUrl: "https://luna-gemnia.stores.jp/items/69c9f27a24fa03107a01a46f",
   },
 ];

@@ -64,7 +64,7 @@ export function generateSalesMessage(
   _concern?: string
 ): string {
   // 商品は存在確認のみ（名前は前面に出さない）
-  const products = getRecommendedProducts(tags);
+  const products = getRecommendedProducts({ tags });
   const hasUpsell = products.some((p) => p.type === "upsell");
 
   const bridge = pick(BRIDGE, tags)?.text ?? DEFAULT_BRIDGE;

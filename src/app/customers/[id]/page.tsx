@@ -808,7 +808,16 @@ export default function CustomerDetailPage() {
           {/* おすすめ商品 */}
           <SectionCard title="おすすめ商品">
             <div className="space-y-3">
-              <ProductSuggestionsPanel products={getRecommendedProducts(tags, pricePresets.length > 0 ? pricePresets : undefined)} />
+              <ProductSuggestionsPanel products={getRecommendedProducts(
+                {
+                  tags,
+                  funnel_stage: customer?.funnel_stage,
+                  purchases: customer?.purchases,
+                  category: customer?.category,
+                  temperature: customer?.temperature,
+                },
+                pricePresets.length > 0 ? pricePresets : undefined,
+              )} />
               <OfferMessagePanel
                 message={generateOfferMessage(tags, pricePresets.length > 0 ? pricePresets : undefined)}
                 onUse={(text) => setLineMessage(text)}

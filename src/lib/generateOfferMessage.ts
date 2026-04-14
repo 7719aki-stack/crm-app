@@ -45,7 +45,7 @@ export function generateOfferMessage(
   tags: string[],
   presets?: OfferProduct[],
 ): string {
-  const products = getRecommendedProducts(tags, presets);
+  const products = getRecommendedProducts({ tags }, presets);
 
   // タグに合ったアップセル商品を優先、なければメイン商品
   const product =

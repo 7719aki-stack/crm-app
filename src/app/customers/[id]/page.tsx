@@ -24,7 +24,7 @@ import {
   getCustomerMessageDraft,
   saveCustomerMessageDraft,
 } from "@/lib/messageDraft";
-import { getProduct } from "@/lib/products";
+import { getProduct, loadPricePresets, type OfferProduct } from "@/lib/products";
 import type { StatusId } from "@/lib/statuses";
 import type {
   CustomerDetail,
@@ -176,6 +176,7 @@ export default function CustomerDetailPage() {
   const [aiLoading,      setAiLoading]      = useState(false);
   const [aiError,        setAiError]        = useState<string | null>(null);
   const [lineTone,       setLineTone]       = useState("共感");
+  const [pricePresets,   setPricePresets]   = useState<OfferProduct[]>([]);
 
   /** 返信候補・オファー文などの「明示的な注入」。
    *  ユーザーが未編集の場合のみ LineSendPanel にも反映する */
@@ -239,6 +240,11 @@ export default function CustomerDetailPage() {
       setAiLoading(false);
     }
   }
+
+  // ── 料金プリセット読み込み ──────────────────────────────
+  useEffect(() => {
+    setPricePresets(loadPricePresets());
+  }, []);
 
   // ── データ取得 ──────────────────────────────────────────
   useEffect(() => {
@@ -802,9 +808,9 @@ export default function CustomerDetailPage() {
           {/* おすすめ商品 */}
           <SectionCard title="おすすめ商品">
             <div className="space-y-3">
-              <ProductSuggestionsPanel products={getRecommendedProducts(tags)} />
+              <ProductSuggestionsPanel products={getRecommendedProducts(tags, pricePresets.length > 0 ? pricePresets : undefined)} />
               <OfferMessagePanel
-                message={generateOfferMessage(tags)}
+                message={generateOfferMessage(tags, pricePresets.length > 0 ? pricePresets : undefined)}
                 onUse={(text) => setLineMessage(text)}
                 onAppend={(text) => appendLineMessage(text)}
               />

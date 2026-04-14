@@ -83,6 +83,24 @@ export type OfferProduct = {
   paymentUrl: string;
 };
 
+export const PRICE_PRESETS_KEY = "crm_price_presets_v1";
+
+export function loadPricePresets(): OfferProduct[] {
+  if (typeof window === "undefined") return OFFER_PRODUCTS;
+  try {
+    const raw = localStorage.getItem(PRICE_PRESETS_KEY);
+    if (!raw) return OFFER_PRODUCTS;
+    const parsed = JSON.parse(raw) as OfferProduct[];
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : OFFER_PRODUCTS;
+  } catch {
+    return OFFER_PRODUCTS;
+  }
+}
+
+export function savePricePresets(presets: OfferProduct[]): void {
+  localStorage.setItem(PRICE_PRESETS_KEY, JSON.stringify(presets));
+}
+
 export const OFFER_PRODUCTS: OfferProduct[] = [
   {
     id: "main",

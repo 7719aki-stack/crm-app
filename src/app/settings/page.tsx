@@ -7,6 +7,12 @@ import {
   DEFAULT_TAG_MASTER,
   type TagGroup,
 } from "@/lib/tagMaster";
+import {
+  loadPricePresets,
+  savePricePresets,
+  OFFER_PRODUCTS,
+  type OfferProduct,
+} from "@/lib/products";
 
 // ─── タグマスタ管理パネル ──────────────────────────────
 function TagMasterPanel() {
@@ -133,11 +139,298 @@ function TagMasterPanel() {
   );
 }
 
+// ─── 料金プリセット管理パネル ─────────────────────────
+const EMPTY_PRESET: OfferProduct = {
+  id: "",
+  name: "",
+  price: 0,
+  type: "upsell",
+  offerType: "quick",
+  recommendedTags: [],
+  paymentUrl: "",
+};
+
+function PricePresetPanel() {
+  const [presets, setPresets] = useState<OfferProduct[]>([]);
+  const [saved,   setSaved]   = useState(false);
+  const [editing, setEditing] = useState<string | null>(null); // id being edited
+  const [draft,   setDraft]   = useState<OfferProduct>(EMPTY_PRESET);
+  const [adding,  setAdding]  = useState(false);
+  const [newDraft, setNewDraft] = useState<OfferProduct>(EMPTY_PRESET);
+
+  useEffect(() => {
+    setPresets(loadPricePresets());
+  }, []);
+
+  function handleSave() {
+    savePricePresets(presets);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  function handleReset() {
+    if (!confirm("料金プリセットを初期値にリセットしますか？")) return;
+    setPresets(OFFER_PRODUCTS);
+    savePricePresets(OFFER_PRODUCTS);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  function startEdit(p: OfferProduct) {
+    setEditing(p.id);
+    setDraft({ ...p });
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+  }
+
+  function commitEdit() {
+    if (!draft.name.trim()) return;
+    setPresets((prev) => prev.map((p) => (p.id === editing ? { ...draft } : p)));
+    setEditing(null);
+  }
+
+  function removePreset(id: string) {
+    setPresets((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  function startAdd() {
+    setNewDraft({ ...EMPTY_PRESET, id: `preset_${Date.now()}` });
+    setAdding(true);
+  }
+
+  function cancelAdd() {
+    setAdding(false);
+  }
+
+  function commitAdd() {
+    if (!newDraft.name.trim()) return;
+    setPresets((prev) => [...prev, { ...newDraft }]);
+    setAdding(false);
+  }
+
+  const TYPE_OPTIONS: { value: OfferProduct["type"]; label: string }[] = [
+    { value: "main",   label: "メイン（常時表示）" },
+    { value: "upsell", label: "アップセル（タグ一致時）" },
+  ];
+
+  function PresetForm({
+    value,
+    onChange,
+    onCommit,
+    onCancel,
+  }: {
+    value: OfferProduct;
+    onChange: (v: OfferProduct) => void;
+    onCommit: () => void;
+    onCancel: () => void;
+  }) {
+    return (
+      <div className="space-y-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] text-gray-500 mb-0.5 block">商品名</label>
+            <input
+              type="text"
+              value={value.name}
+              onChange={(e) => onChange({ ...value, name: e.target.value })}
+              placeholder="商品名を入力"
+              className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-400"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-gray-500 mb-0.5 block">金額（円）</label>
+            <input
+              type="number"
+              value={value.price}
+              onChange={(e) => onChange({ ...value, price: parseInt(e.target.value, 10) || 0 })}
+              placeholder="0"
+              className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-400"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500 mb-0.5 block">決済URL（Stores.jpなど）</label>
+          <input
+            type="url"
+            value={value.paymentUrl}
+            onChange={(e) => onChange({ ...value, paymentUrl: e.target.value })}
+            placeholder="https://..."
+            className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-400"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] text-gray-500 mb-0.5 block">種別</label>
+            <select
+              value={value.type}
+              onChange={(e) =>
+                onChange({ ...value, type: e.target.value as OfferProduct["type"] })
+              }
+              className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
+            >
+              {TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] text-gray-500 mb-0.5 block">推奨タグ（カンマ区切り）</label>
+            <input
+              type="text"
+              value={(value.recommendedTags ?? []).join(", ")}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  recommendedTags: e.target.value
+                    .split(",")
+                    .map((t) => t.trim())
+                    .filter(Boolean),
+                })
+              }
+              placeholder="例: 復縁, 片思い・進展"
+              className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-400"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onCancel}
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:border-gray-300 transition-colors"
+          >
+            キャンセル
+          </button>
+          <button
+            onClick={onCommit}
+            disabled={!value.name.trim()}
+            className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-colors disabled:opacity-40"
+          >
+            確定
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-800">料金プリセット</h3>
+        <div className="flex items-center gap-2">
+          {saved && (
+            <span className="text-xs text-emerald-600 font-medium">保存しました</span>
+          )}
+          <button
+            onClick={handleReset}
+            className="text-xs text-gray-400 hover:text-gray-600 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
+          >
+            初期値に戻す
+          </button>
+          <button
+            onClick={handleSave}
+            className="text-xs bg-brand-600 text-white font-semibold px-3 py-1.5 rounded-lg hover:bg-brand-700 transition-colors"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+
+      <div className="p-5 space-y-3">
+        <p className="text-xs text-gray-400">
+          鑑定メニューと決済URLを管理します。おすすめ商品の表示にも使われます。
+        </p>
+
+        {/* 商品一覧 */}
+        <div className="space-y-2">
+          {presets.map((p) => (
+            <div key={p.id}>
+              {editing === p.id ? (
+                <PresetForm
+                  value={draft}
+                  onChange={setDraft}
+                  onCommit={commitEdit}
+                  onCancel={cancelEdit}
+                />
+              ) : (
+                <div className="flex items-center gap-3 px-3.5 py-3 rounded-lg border border-gray-100 bg-gray-50">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                        p.type === "main"
+                          ? "bg-brand-100 text-brand-700"
+                          : "bg-gray-100 text-gray-500"
+                      }`}>
+                        {p.type === "main" ? "メイン" : "アップセル"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-0.5">
+                      <span className="text-xs text-gray-600">¥{p.price.toLocaleString()}</span>
+                      {p.paymentUrl ? (
+                        <a
+                          href={p.paymentUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-brand-600 hover:underline truncate max-w-[200px]"
+                        >
+                          {p.paymentUrl}
+                        </a>
+                      ) : (
+                        <span className="text-[10px] text-gray-300">決済URL未設定</span>
+                      )}
+                    </div>
+                    {(p.recommendedTags ?? []).length > 0 && (
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        推奨タグ: {p.recommendedTags!.join(", ")}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={() => startEdit(p)}
+                      className="text-[11px] px-2 py-1 rounded border border-gray-200 text-gray-500 hover:border-brand-300 hover:text-brand-600 transition-colors"
+                    >
+                      編集
+                    </button>
+                    <button
+                      onClick={() => removePreset(p.id)}
+                      className="text-[11px] px-2 py-1 rounded border border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-500 transition-colors"
+                    >
+                      削除
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* 追加フォーム */}
+        {adding ? (
+          <PresetForm
+            value={newDraft}
+            onChange={setNewDraft}
+            onCommit={commitAdd}
+            onCancel={cancelAdd}
+          />
+        ) : (
+          <button
+            onClick={startAdd}
+            className="w-full text-xs px-3 py-2 rounded-lg border border-dashed border-gray-200 text-gray-400 hover:border-brand-300 hover:text-brand-600 transition-colors"
+          >
+            + 商品を追加
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── その他の予定設定項目 ─────────────────────────────
 const OTHER_PLANNED = [
   { icon: "🔗", label: "LINE連携",        note: "LINE Official Account と接続" },
   { icon: "👤", label: "プロフィール設定", note: "表示名・アイコンの変更" },
-  { icon: "💴", label: "料金プリセット",   note: "鑑定メニューと料金の登録" },
 ];
 
 export default function SettingsPage() {
@@ -145,6 +438,9 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-2xl">
       {/* タグマスタ管理（実装済み） */}
       <TagMasterPanel />
+
+      {/* 料金プリセット（実装済み） */}
+      <PricePresetPanel />
 
       {/* その他（準備中） */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">

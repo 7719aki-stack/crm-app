@@ -3,6 +3,7 @@
 // ルール：商品1つだけ / 「必要であれば」必須 / 「気になる場合だけ」必須
 
 import { getRecommendedProducts } from "./getRecommendedProducts";
+import type { OfferProduct } from "./products";
 
 // ── タグ別の前置き ──────────────────────────────────────────────
 
@@ -40,8 +41,11 @@ function pickIntro(tags: string[]): string {
 
 // ── メイン関数 ──────────────────────────────────────────────────
 
-export function generateOfferMessage(tags: string[]): string {
-  const products = getRecommendedProducts(tags);
+export function generateOfferMessage(
+  tags: string[],
+  presets?: OfferProduct[],
+): string {
+  const products = getRecommendedProducts(tags, presets);
 
   // タグに合ったアップセル商品を優先、なければメイン商品
   const product =

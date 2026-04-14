@@ -1,15 +1,20 @@
 import { OFFER_PRODUCTS, type OfferProduct } from "./products";
 
-export function getRecommendedProducts(tags: string[]): OfferProduct[] {
+export function getRecommendedProducts(
+  tags: string[],
+  presets?: OfferProduct[],
+): OfferProduct[] {
+  const catalog = presets ?? OFFER_PRODUCTS;
+
   if (!tags || tags.length === 0) {
-    return OFFER_PRODUCTS.filter((p) => p.type === "main");
+    return catalog.filter((p) => p.type === "main");
   }
 
-  const matched = OFFER_PRODUCTS.filter((product) =>
-    product.recommendedTags?.some((tag) => tags.includes(tag))
+  const matched = catalog.filter((product) =>
+    product.recommendedTags?.some((tag) => tags.includes(tag)),
   );
 
-  const main = OFFER_PRODUCTS.find((p) => p.type === "main");
+  const main = catalog.find((p) => p.type === "main");
 
   const result = [...(main ? [main] : []), ...matched];
 

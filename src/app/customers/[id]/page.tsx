@@ -783,7 +783,7 @@ export default function CustomerDetailPage() {
                   disabled={aiLoading}
                   className="inline-flex items-center gap-1 text-xs bg-brand-600 text-white px-2.5 py-1 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors"
                 >
-                  {aiLoading ? "生成中…" : "✨ AI返信を作成"}
+                  {aiLoading ? "生成中…" : "✨ このトーンで作成"}
                 </button>
               </div>
             }

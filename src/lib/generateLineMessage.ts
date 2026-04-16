@@ -179,6 +179,35 @@ export function resolveUrgencyMessage(phase: CustomerPhase): string {
   return pickRandom(URGENCY_BY_PHASE[phase]);
 }
 
+// ── フェーズ別選択式CTA ───────────────────────────────────────────────────────
+// ①を選べばそのまま成約、②を選んでも返信が来る。どちらも会話を継続させる設計。
+
+const CHOICE_CTA_BY_PHASE: Record<CustomerPhase, string[]> = {
+  cold: [
+    "①まずは今の状況を整理してみたい\n②もう少し自分で考えてみる\n\nどちらか返してくれると助かります🙏",
+    "①不安を整理してみたい\n②今はまだ様子を見たい\n\nどちらか教えてください😊",
+    "①今の状態を確認してみたい\n②少し考えてから決めたい\n\nどちらかだけ返してください！",
+  ],
+  warm: [
+    "①詳しく確認してみたい\n②少し考えてから決めたい\n\nどちらか教えてください😊",
+    "①このまま進んだ場合の結果を見てみたい\n②もう少し様子を見る\n\nどちらか返してくれると助かります🙏",
+    "①一度確認してみたい\n②今は自分で整理したい\n\nどちらかだけ返してください！",
+  ],
+  hot: [
+    "①このまま進めたい\n②もう少し考えたい\n\nどちらか返してくれると助かります🙏",
+    "①今すぐ動きたい\n②少し考えてから決める\n\nどちらか教えてください😊",
+    "①流れを変えにいきたい\n②まだ迷っている\n\nどちらかだけ返してください！",
+  ],
+};
+
+/**
+ * フェーズに対応した選択式CTAをランダムで返す。
+ * LINE文の末尾に配置し、どちらの選択肢を選んでも返信を促す設計。
+ */
+export function resolveChoiceCTA(phase: CustomerPhase): string {
+  return pickRandom(CHOICE_CTA_BY_PHASE[phase]);
+}
+
 // ── ユーティリティ ────────────────────────────────────────────────────────────
 
 function pickEmpathy(tags: string[]): string {
@@ -209,19 +238,20 @@ export function generateLineMessage({
   tags,
   productName,
 }: GenerateLineMessageOptions): string {
-  const empathy = pickEmpathy(tags);
-  const hook    = resolveProductHook(productName);
-  const body    = pickRandom(PHASE_BODY[phase]);
-  const urgency = resolveUrgencyMessage(phase);
+  const empathy    = pickEmpathy(tags);
+  const hook       = resolveProductHook(productName);
+  const body       = pickRandom(PHASE_BODY[phase]);
+  const urgency    = resolveUrgencyMessage(phase);
+  const choiceCTA  = resolveChoiceCTA(phase);
 
-  // 構成: 共感 → フック → 状況整理 → 緊急性 → オファー（商品名あり時） → アクション
+  // 構成: 共感 → フック → 状況整理 → 緊急性 → オファー（商品名あり時） → 選択式CTA
   const parts: string[] = [empathy, "", hook, "", body.situation, "", urgency];
 
   if (productName) {
     parts.push("", fillProduct(body.offer, productName));
   }
 
-  parts.push("", body.action);
+  parts.push("", choiceCTA);
 
   return parts.join("\n");
 }

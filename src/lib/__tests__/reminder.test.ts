@@ -31,13 +31,15 @@ const localStorageMock = {
 import {
   scheduleReminder,
   resolveReminderDelayHours,
+  resolveSecondReminderDelayHours,
+  scheduleSecondReminder,
   markReminderClicked,
   getDueReminders,
   updateReminderStatus,
   buildDueReminderMessages,
 } from "../reminder";
 
-import { sendReminderMessage } from "../generateLineMessage";
+import { sendReminderMessage, sendSecondReminderMessage } from "../generateLineMessage";
 
 // ── 各テスト前に localStorage をリセット ─────────────────────────────────────
 
@@ -336,5 +338,251 @@ describe("buildDueReminderMessages", () => {
       new Date(Date.now() + 23 * 60 * 60 * 1000),
     );
     assert.equal(results.length, 0);
+  });
+});
+
+// ─── 7. resolveSecondReminderDelayHours ──────────────────────────────────────
+
+describe("resolveSecondReminderDelayHours", () => {
+  it("cold は 24 時間を返す", () => {
+    assert.equal(resolveSecondReminderDelayHours("cold"), 24);
+  });
+
+  it("warm は 18 時間を返す", () => {
+    assert.equal(resolveSecondReminderDelayHours("warm"), 18);
+  });
+
+  it("hot は 12 時間を返す", () => {
+    assert.equal(resolveSecondReminderDelayHours("hot"), 12);
+  });
+
+  it("不明な phase は 24 時間を返す", () => {
+    assert.equal(resolveSecondReminderDelayHours("unknown"), 24);
+    assert.equal(resolveSecondReminderDelayHours(""),        24);
+  });
+});
+
+// ─── 8. sendSecondReminderMessage ─────────────────────────────────────────────
+
+describe("sendSecondReminderMessage", () => {
+  it("positive の2通目文面: URL と固有文言を含む", () => {
+    const url = "https://example.com/pay";
+    const msg = sendSecondReminderMessage(url, "positive");
+
+    assert.ok(msg.includes(url),                         "URL が含まれること");
+    assert.ok(msg.includes("その後いかがでしょうか"),    "冒頭文言が含まれること");
+    assert.ok(msg.includes("動くなら今が流れを変えやすいです"), "末尾文言が含まれること");
+  });
+
+  it("positive の2通目に hold 文言は入らない", () => {
+    const msg = sendSecondReminderMessage("https://example.com/pay", "positive");
+    assert.ok(!msg.includes("迷いがある状態"));
+  });
+
+  it("hold の2通目文面: URL と固有文言を含む", () => {
+    const url = "https://example.com/pay";
+    const msg = sendSecondReminderMessage(url, "hold");
+
+    assert.ok(msg.includes(url),                                       "URL が含まれること");
+    assert.ok(msg.includes("まだ迷いがある状態でも大丈夫です"),        "冒頭文言が含まれること");
+    assert.ok(msg.includes("先に整理しておくと次の判断がかなり楽になります"), "末尾文言が含まれること");
+  });
+
+  it("hold の2通目に positive 文言は入らない", () => {
+    const msg = sendSecondReminderMessage("https://example.com/pay", "hold");
+    assert.ok(!msg.includes("その後いかがでしょうか"));
+  });
+});
+
+// ─── 9. scheduleSecondReminder ────────────────────────────────────────────────
+
+describe("scheduleSecondReminder", () => {
+  it("1通目作成時に sendCount = 1 になる", () => {
+    const item = scheduleReminder(100, "https://example.com/pay", "positive", "cold");
+    assert.equal(item!.sendCount, 1);
+  });
+
+  it("1通目（未クリック）から2通目が作成される", () => {
+    const first  = scheduleReminder(101, "https://example.com/pay", "positive", "cold")!;
+    const second = scheduleSecondReminder(first);
+
+    assert.notEqual(second, null);
+    assert.equal(second!.sendCount,   2);
+    assert.equal(second!.customerId,  101);
+    assert.equal(second!.status,      "pending");
+    assert.equal(second!.hasClicked,  false);
+  });
+
+  it("クリック済み item から2通目は作成されない", () => {
+    const first       = scheduleReminder(102, "https://example.com/pay", "positive", "cold")!;
+    const clickedItem = { ...first, hasClicked: true };
+    const second      = scheduleSecondReminder(clickedItem);
+
+    assert.equal(second, null);
+  });
+
+  it("sendCount = 2 の item からさらに3通目は作成されない", () => {
+    const first  = scheduleReminder(103, "https://example.com/pay", "positive", "cold")!;
+    const second = scheduleSecondReminder(first)!;
+    const third  = scheduleSecondReminder(second);
+
+    assert.equal(third, null);
+  });
+
+  it("cancelled の1通目から2通目は作成されない", () => {
+    const first          = scheduleReminder(109, "https://example.com/pay", "hold", "cold")!;
+    const cancelledItem  = { ...first, status: "cancelled" as const };
+    const second         = scheduleSecondReminder(cancelledItem);
+
+    assert.equal(second, null);
+  });
+
+  it("同一顧客の sendCount=2 が既にある場合は重複作成しない", () => {
+    const first  = scheduleReminder(110, "https://example.com/pay", "positive", "warm")!;
+    const second = scheduleSecondReminder(first);
+    const dup    = scheduleSecondReminder(first);  // 2回目の呼び出し
+
+    assert.notEqual(second, null, "1回目は作成される");
+    assert.equal(dup, null,       "2回目は null");
+  });
+
+  describe("2通目 scheduledAt の phase 別遅延", () => {
+    it("cold: 24 時間後になる", () => {
+      const first  = scheduleReminder(104, "https://example.com/pay", "positive", "cold")!;
+      const before = Date.now();
+      const second = scheduleSecondReminder(first)!;
+      const after  = Date.now();
+
+      const scheduled = new Date(second.scheduledAt).getTime();
+      const delay     = 24 * 60 * 60 * 1000;
+      assert.ok(scheduled >= before + delay - 1000);
+      assert.ok(scheduled <= after  + delay + 1000);
+    });
+
+    it("warm: 18 時間後になる", () => {
+      const first  = scheduleReminder(105, "https://example.com/pay", "positive", "warm")!;
+      const before = Date.now();
+      const second = scheduleSecondReminder(first)!;
+      const after  = Date.now();
+
+      const scheduled = new Date(second.scheduledAt).getTime();
+      const delay     = 18 * 60 * 60 * 1000;
+      assert.ok(scheduled >= before + delay - 1000);
+      assert.ok(scheduled <= after  + delay + 1000);
+    });
+
+    it("hot: 12 時間後になる", () => {
+      const first  = scheduleReminder(106, "https://example.com/pay", "positive", "hot")!;
+      const before = Date.now();
+      const second = scheduleSecondReminder(first)!;
+      const after  = Date.now();
+
+      const scheduled = new Date(second.scheduledAt).getTime();
+      const delay     = 12 * 60 * 60 * 1000;
+      assert.ok(scheduled >= before + delay - 1000);
+      assert.ok(scheduled <= after  + delay + 1000);
+    });
+  });
+
+  describe("buildDueReminderMessages 経由の2通目自動作成", () => {
+    it("1通目 due 処理後に2通目が localStorage に作成される", () => {
+      const url = "https://example.com/pay";
+      scheduleReminder(107, url, "positive", "cold");
+
+      // 1通目が due になる時刻（25h後）
+      const results = buildDueReminderMessages(new Date(Date.now() + 25 * 60 * 60 * 1000));
+      assert.equal(results.length, 1, "1通目が due");
+      updateReminderStatus(results[0].item.id, "sent");
+
+      // 2通目が due になる時刻（さらに 24h 後）
+      const now2    = new Date(Date.now() + 25 * 60 * 60 * 1000 + 24 * 60 * 60 * 1000);
+      const due2    = getDueReminders(now2);
+      assert.equal(due2.length,          1,        "2通目が due");
+      assert.equal(due2[0].sendCount,    2,        "sendCount = 2");
+      assert.equal(due2[0].customerId,   107);
+    });
+
+    it("2通目 due 処理時に hold の2通目文面が使われる", () => {
+      const url = "https://example.com/pay";
+      scheduleReminder(108, url, "hold", "warm");
+
+      // 1通目 due（13h後）
+      const r1 = buildDueReminderMessages(new Date(Date.now() + 13 * 60 * 60 * 1000));
+      assert.equal(r1.length, 1);
+      updateReminderStatus(r1[0].item.id, "sent");
+
+      // 2通目 due（さらに 18h 後）
+      const r2 = buildDueReminderMessages(
+        new Date(Date.now() + 13 * 60 * 60 * 1000 + 19 * 60 * 60 * 1000),
+      );
+      assert.equal(r2.length, 1);
+      assert.ok(r2[0].message.includes("まだ迷いがある状態でも大丈夫です"), "hold 2通目文面");
+      assert.ok(r2[0].message.includes(url));
+    });
+
+    it("2通目 due 処理時に positive の2通目文面が使われる", () => {
+      const url = "https://example.com/pay";
+      scheduleReminder(111, url, "positive", "hot");
+
+      // 1通目 due（4h後）
+      const r1 = buildDueReminderMessages(new Date(Date.now() + 4 * 60 * 60 * 1000));
+      assert.equal(r1.length, 1);
+      updateReminderStatus(r1[0].item.id, "sent");
+
+      // 2通目 due（さらに 12h 後）
+      const r2 = buildDueReminderMessages(
+        new Date(Date.now() + 4 * 60 * 60 * 1000 + 13 * 60 * 60 * 1000),
+      );
+      assert.equal(r2.length, 1);
+      assert.ok(r2[0].message.includes("その後いかがでしょうか"), "positive 2通目文面");
+      assert.ok(r2[0].message.includes(url));
+    });
+
+    it("クリック済みなら2通目 due 処理で何も返さない", () => {
+      const url = "https://example.com/pay";
+      scheduleReminder(112, url, "positive", "cold");
+
+      // 1通目 due 処理前にクリック
+      markReminderClicked(112);
+
+      const r1 = buildDueReminderMessages(new Date(Date.now() + 25 * 60 * 60 * 1000));
+      assert.equal(r1.length, 0, "クリック済みは due に含まれない");
+
+      // 2通目も作成されていないこと
+      const due2 = getDueReminders(new Date(Date.now() + 50 * 60 * 60 * 1000));
+      assert.equal(due2.length, 0, "2通目も作成されていない");
+    });
+
+    it("未到達 scheduledAt の2通目は送信対象外", () => {
+      const url = "https://example.com/pay";
+      scheduleReminder(113, url, "hold", "cold");
+
+      // 1通目 due
+      const r1 = buildDueReminderMessages(new Date(Date.now() + 25 * 60 * 60 * 1000));
+      updateReminderStatus(r1[0].item.id, "sent");
+
+      // 2通目は scheduleSecondReminder 呼び出し時の実際の壁時計 + 24h が scheduledAt。
+      // 23h 後（未到達）では返ってこないことを確認する。
+      const r2 = buildDueReminderMessages(
+        new Date(Date.now() + 23 * 60 * 60 * 1000),
+      );
+      assert.equal(r2.length, 0, "2通目はまだ未到達");
+    });
+
+    it("到達済み scheduledAt の2通目は送信対象になる", () => {
+      const url = "https://example.com/pay";
+      scheduleReminder(114, url, "positive", "warm");
+
+      // 1通目 due（13h後）
+      const r1 = buildDueReminderMessages(new Date(Date.now() + 13 * 60 * 60 * 1000));
+      updateReminderStatus(r1[0].item.id, "sent");
+
+      // 2通目 due（18h後 = 到達済み）
+      const r2 = buildDueReminderMessages(
+        new Date(Date.now() + 13 * 60 * 60 * 1000 + 19 * 60 * 60 * 1000),
+      );
+      assert.equal(r2.length,           1,   "2通目が到達済み");
+      assert.equal(r2[0].item.sendCount, 2);
+    });
   });
 });

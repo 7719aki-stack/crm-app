@@ -261,7 +261,7 @@ export function generateLineMessage({
 // positive / hold のいずれかで URL 未クリックの場合、24時間後に再送するメッセージを生成する。
 
 /**
- * 決済URLを再送するリマインダーメッセージを生成する。
+ * 決済URLを再送するリマインダーメッセージを生成する（1通目）。
  * intent によって文面を出し分ける。
  *
  * @param paymentUrl 決済URL
@@ -288,6 +288,41 @@ export function sendReminderMessage(
     paymentUrl,
     "",
     "※このタイミングを逃すと、同じ流れになりやすいです",
+  ].join("\n");
+}
+
+/**
+ * 2通目リマインダーメッセージを生成する。
+ * 1通目未クリックの場合に送る追撃文。intent によって文面を出し分ける。
+ *
+ * @param paymentUrl 決済URL
+ * @param intent     "positive" | "hold"
+ */
+export function sendSecondReminderMessage(
+  paymentUrl: string,
+  intent: "positive" | "hold",
+): string {
+  if (intent === "hold") {
+    return [
+      "まだ迷いがある状態でも大丈夫です。",
+      "一度見てから決める形でも問題ありません👇",
+      "",
+      paymentUrl,
+      "",
+      "焦らなくて大丈夫ですが、",
+      "先に整理しておくと次の判断がかなり楽になります。",
+    ].join("\n");
+  }
+
+  // positive
+  return [
+    "その後いかがでしょうか。",
+    "まだ確認できていなければ、こちらから見られます👇",
+    "",
+    paymentUrl,
+    "",
+    "必要なタイミングで大丈夫ですが、",
+    "動くなら今が流れを変えやすいです。",
   ].join("\n");
 }
 

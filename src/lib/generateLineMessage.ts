@@ -326,6 +326,40 @@ export function sendSecondReminderMessage(
   ].join("\n");
 }
 
+/**
+ * 3通目（最終）リマインダーメッセージを生成する。
+ * 未クリックユーザーへの最後の1通。intent によって文面を出し分ける。
+ *
+ * @param paymentUrl 決済URL
+ * @param intent     "positive" | "hold"
+ */
+export function sendThirdReminderMessage(
+  paymentUrl: string,
+  intent: "positive" | "hold",
+): string {
+  if (intent === "hold") {
+    return [
+      "ここまで見ていただきありがとうございます。",
+      "迷っていても大丈夫です。",
+      "一度だけ確認してみてください👇",
+      "",
+      paymentUrl,
+      "",
+      "必要なければスルーでOKです",
+    ].join("\n");
+  }
+
+  // positive
+  return [
+    "これが最後のご案内になります。",
+    "今のタイミングを逃すと、同じ流れに戻すのが少し大変になります👇",
+    "",
+    paymentUrl,
+    "",
+    "迷っているなら今ここで一歩進めてください",
+  ].join("\n");
+}
+
 // ── クロージングメッセージ生成 ────────────────────────────────────────────────
 // positive 返信に対して「確実に成約に繋げる」専用メッセージを生成する。
 // 構成: お礼 → 行動後押し → 限定性/緊急性 → CTA（URL）

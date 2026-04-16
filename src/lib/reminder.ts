@@ -3,7 +3,7 @@
 // phase ごとの遅延時間（cold: 24h / warm: 12h / hot: 3h）後に
 // 自動追撃メッセージを送るための スケジュール・追跡ロジック。
 
-import { sendReminderMessage, sendSecondReminderMessage } from "./generateLineMessage";
+import { sendReminderMessage, sendSecondReminderMessage, sendThirdReminderMessage } from "./generateLineMessage";
 
 // ── 型定義 ────────────────────────────────────────────────────────────────────
 
@@ -18,7 +18,7 @@ export interface ReminderItem {
   scheduledAt: string;  // ISO datetime（intent 検出時 + phase 別遅延）
   hasClicked:  boolean;
   status:      ReminderStatus;
-  sendCount:   number;  // 1通目=1, 2通目=2
+  sendCount:   number;  // 1通目=1, 2通目=2, 3通目=3
 }
 
 // ── 定数 ──────────────────────────────────────────────────────────────────────
@@ -53,6 +53,20 @@ export function resolveSecondReminderDelayHours(phase: string): number {
   if (phase === "warm") return 18;
   if (phase === "hot")  return 12;
   return 24; // cold または不明
+}
+
+/**
+ * 3通目リマインダーの phase 別送信間隔（時間）を返す。
+ * 不明な phase は安全側の 36 時間を返す。
+ *
+ * - warm => 24h
+ * - hot  => 18h
+ * - cold / 不明 => 36h
+ */
+export function resolveThirdReminderDelayHours(phase: string): number {
+  if (phase === "warm") return 24;
+  if (phase === "hot")  return 18;
+  return 36; // cold または不明
 }
 
 // ── localStorage ヘルパー ─────────────────────────────────────────────────────
@@ -194,8 +208,52 @@ export function scheduleSecondReminder(firstItem: ReminderItem): ReminderItem | 
 }
 
 /**
+ * 2通目リマインダーが送信済み・未クリックの場合に3通目をスケジュールする。
+ *
+ * 条件:
+ * - intent が positive または hold
+ * - sendCount === 2（2通目のみ）
+ * - hasClicked === false
+ * - status が cancelled でない
+ * - 同一顧客の sendCount=3 が既に存在しない（重複防止）
+ *
+ * @returns 作成した ReminderItem、条件不一致または重複時は null
+ */
+export function scheduleThirdReminder(secondItem: ReminderItem): ReminderItem | null {
+  if (secondItem.intent !== "positive" && secondItem.intent !== "hold") return null;
+  if ((secondItem.sendCount ?? 1) !== 2) return null;
+  if (secondItem.hasClicked) return null;
+  if (secondItem.status === "cancelled") return null;
+
+  const all = lsRead();
+
+  // sendCount=3 の reminder が既に存在する場合は作成しない
+  const hasThird = all.some(
+    (item) => item.customerId === secondItem.customerId && (item.sendCount ?? 1) === 3,
+  );
+  if (hasThird) return null;
+
+  const now     = new Date();
+  const delayMs = resolveThirdReminderDelayHours(secondItem.phase) * 60 * 60 * 1000;
+  const item: ReminderItem = {
+    id:          `reminder_${Date.now()}_${secondItem.customerId}_3`,
+    customerId:  secondItem.customerId,
+    paymentUrl:  secondItem.paymentUrl,
+    intent:      secondItem.intent,
+    phase:       secondItem.phase,
+    scheduledAt: new Date(now.getTime() + delayMs).toISOString(),
+    hasClicked:  false,
+    status:      "pending",
+    sendCount:   3,
+  };
+
+  lsWrite([...all, item]);
+  return item;
+}
+
+/**
  * 期限到来・未クリックのリマインダーに対してメッセージ文を生成して返す。
- * sendCount=1 のアイテムは2通目リマインダーを自動作成する。
+ * sendCount=1 のアイテムは2通目を、sendCount=2 のアイテムは3通目を自動作成する。
  * 送信後は呼び出し元で updateReminderStatus(id, "sent") を呼ぶこと。
  *
  * @returns { item, message }[] 送信対象の一覧
@@ -204,16 +262,18 @@ export function buildDueReminderMessages(
   now = new Date(),
 ): { item: ReminderItem; message: string }[] {
   return getDueReminders(now).map((item) => {
-    // 1通目処理時に2通目を自動スケジュール
-    if ((item.sendCount ?? 1) === 1) {
-      scheduleSecondReminder(item);
-    }
+    const count = item.sendCount ?? 1;
 
-    return {
-      item,
-      message: (item.sendCount ?? 1) === 2
-        ? sendSecondReminderMessage(item.paymentUrl, item.intent)
-        : sendReminderMessage(item.paymentUrl, item.intent),
-    };
+    // 1通目処理時に2通目を自動スケジュール
+    if (count === 1) scheduleSecondReminder(item);
+    // 2通目処理時に3通目を自動スケジュール
+    if (count === 2) scheduleThirdReminder(item);
+
+    const message =
+      count === 3 ? sendThirdReminderMessage(item.paymentUrl, item.intent) :
+      count === 2 ? sendSecondReminderMessage(item.paymentUrl, item.intent) :
+                    sendReminderMessage(item.paymentUrl, item.intent);
+
+    return { item, message };
   });
 }

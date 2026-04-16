@@ -32,14 +32,16 @@ import {
   scheduleReminder,
   resolveReminderDelayHours,
   resolveSecondReminderDelayHours,
+  resolveThirdReminderDelayHours,
   scheduleSecondReminder,
+  scheduleThirdReminder,
   markReminderClicked,
   getDueReminders,
   updateReminderStatus,
   buildDueReminderMessages,
 } from "../reminder";
 
-import { sendReminderMessage, sendSecondReminderMessage } from "../generateLineMessage";
+import { sendReminderMessage, sendSecondReminderMessage, sendThirdReminderMessage } from "../generateLineMessage";
 
 // ── 各テスト前に localStorage をリセット ─────────────────────────────────────
 
@@ -583,6 +585,267 @@ describe("scheduleSecondReminder", () => {
       );
       assert.equal(r2.length,           1,   "2通目が到達済み");
       assert.equal(r2[0].item.sendCount, 2);
+    });
+  });
+});
+
+// ─── 10. resolveThirdReminderDelayHours ──────────────────────────────────────
+
+describe("resolveThirdReminderDelayHours", () => {
+  it("cold は 36 時間を返す", () => {
+    assert.equal(resolveThirdReminderDelayHours("cold"), 36);
+  });
+
+  it("warm は 24 時間を返す", () => {
+    assert.equal(resolveThirdReminderDelayHours("warm"), 24);
+  });
+
+  it("hot は 18 時間を返す", () => {
+    assert.equal(resolveThirdReminderDelayHours("hot"), 18);
+  });
+
+  it("不明な phase は 36 時間を返す", () => {
+    assert.equal(resolveThirdReminderDelayHours("unknown"), 36);
+    assert.equal(resolveThirdReminderDelayHours(""),        36);
+  });
+});
+
+// ─── 11. sendThirdReminderMessage ─────────────────────────────────────────────
+
+describe("sendThirdReminderMessage", () => {
+  it("positive の3通目文面: URL と固有文言を含む", () => {
+    const url = "https://example.com/pay";
+    const msg = sendThirdReminderMessage(url, "positive");
+
+    assert.ok(msg.includes(url),                               "URL が含まれること");
+    assert.ok(msg.includes("これが最後のご案内になります"),    "冒頭文言が含まれること");
+    assert.ok(msg.includes("迷っているなら今ここで一歩進めてください"), "末尾文言が含まれること");
+  });
+
+  it("positive の3通目に hold 文言は入らない", () => {
+    const msg = sendThirdReminderMessage("https://example.com/pay", "positive");
+    assert.ok(!msg.includes("スルーでOK"));
+  });
+
+  it("hold の3通目文面: URL と固有文言を含む", () => {
+    const url = "https://example.com/pay";
+    const msg = sendThirdReminderMessage(url, "hold");
+
+    assert.ok(msg.includes(url),                                    "URL が含まれること");
+    assert.ok(msg.includes("ここまで見ていただきありがとうございます"), "冒頭文言が含まれること");
+    assert.ok(msg.includes("必要なければスルーでOKです"),             "末尾文言が含まれること");
+  });
+
+  it("hold の3通目に positive 文言は入らない", () => {
+    const msg = sendThirdReminderMessage("https://example.com/pay", "hold");
+    assert.ok(!msg.includes("これが最後のご案内になります"));
+  });
+});
+
+// ─── 12. scheduleThirdReminder ────────────────────────────────────────────────
+
+describe("scheduleThirdReminder", () => {
+  it("2通目（未クリック）から3通目が作成される", () => {
+    const first  = scheduleReminder(200, "https://example.com/pay", "positive", "cold")!;
+    const second = scheduleSecondReminder(first)!;
+    const third  = scheduleThirdReminder(second);
+
+    assert.notEqual(third, null);
+    assert.equal(third!.sendCount,  3);
+    assert.equal(third!.customerId, 200);
+    assert.equal(third!.status,     "pending");
+    assert.equal(third!.hasClicked, false);
+  });
+
+  it("クリック済み item から3通目は作成されない", () => {
+    const first       = scheduleReminder(201, "https://example.com/pay", "positive", "cold")!;
+    const second      = scheduleSecondReminder(first)!;
+    const clickedItem = { ...second, hasClicked: true };
+    const third       = scheduleThirdReminder(clickedItem);
+
+    assert.equal(third, null);
+  });
+
+  it("sendCount = 3 の item からさらに4通目は作成されない", () => {
+    const first  = scheduleReminder(202, "https://example.com/pay", "positive", "cold")!;
+    const second = scheduleSecondReminder(first)!;
+    const third  = scheduleThirdReminder(second)!;
+    const fourth = scheduleThirdReminder(third);
+
+    assert.equal(fourth, null);
+  });
+
+  it("sendCount = 1 の item からは3通目を作れない（2通目経由が必要）", () => {
+    const first = scheduleReminder(203, "https://example.com/pay", "positive", "cold")!;
+    const third = scheduleThirdReminder(first);
+
+    assert.equal(third, null);
+  });
+
+  it("cancelled の2通目から3通目は作成されない", () => {
+    const first          = scheduleReminder(204, "https://example.com/pay", "hold", "cold")!;
+    const second         = scheduleSecondReminder(first)!;
+    const cancelledItem  = { ...second, status: "cancelled" as const };
+    const third          = scheduleThirdReminder(cancelledItem);
+
+    assert.equal(third, null);
+  });
+
+  it("同一顧客の sendCount=3 が既にある場合は重複作成しない", () => {
+    const first  = scheduleReminder(205, "https://example.com/pay", "positive", "warm")!;
+    const second = scheduleSecondReminder(first)!;
+    const third  = scheduleThirdReminder(second);
+    const dup    = scheduleThirdReminder(second);
+
+    assert.notEqual(third, null, "1回目は作成される");
+    assert.equal(dup, null,      "2回目は null");
+  });
+
+  describe("3通目 scheduledAt の phase 別遅延", () => {
+    it("cold: 36 時間後になる", () => {
+      const first  = scheduleReminder(206, "https://example.com/pay", "positive", "cold")!;
+      const second = scheduleSecondReminder(first)!;
+      const before = Date.now();
+      const third  = scheduleThirdReminder(second)!;
+      const after  = Date.now();
+
+      const scheduled = new Date(third.scheduledAt).getTime();
+      const delay     = 36 * 60 * 60 * 1000;
+      assert.ok(scheduled >= before + delay - 1000);
+      assert.ok(scheduled <= after  + delay + 1000);
+    });
+
+    it("warm: 24 時間後になる", () => {
+      const first  = scheduleReminder(207, "https://example.com/pay", "positive", "warm")!;
+      const second = scheduleSecondReminder(first)!;
+      const before = Date.now();
+      const third  = scheduleThirdReminder(second)!;
+      const after  = Date.now();
+
+      const scheduled = new Date(third.scheduledAt).getTime();
+      const delay     = 24 * 60 * 60 * 1000;
+      assert.ok(scheduled >= before + delay - 1000);
+      assert.ok(scheduled <= after  + delay + 1000);
+    });
+
+    it("hot: 18 時間後になる", () => {
+      const first  = scheduleReminder(208, "https://example.com/pay", "positive", "hot")!;
+      const second = scheduleSecondReminder(first)!;
+      const before = Date.now();
+      const third  = scheduleThirdReminder(second)!;
+      const after  = Date.now();
+
+      const scheduled = new Date(third.scheduledAt).getTime();
+      const delay     = 18 * 60 * 60 * 1000;
+      assert.ok(scheduled >= before + delay - 1000);
+      assert.ok(scheduled <= after  + delay + 1000);
+    });
+  });
+
+  describe("buildDueReminderMessages 経由の3通目自動作成", () => {
+    it("2通目 due 処理後に3通目が localStorage に作成される", () => {
+      const url = "https://example.com/pay";
+      scheduleReminder(209, url, "positive", "cold");
+
+      // 1通目 due（25h後）→ 2通目スケジュール
+      const r1 = buildDueReminderMessages(new Date(Date.now() + 25 * 60 * 60 * 1000));
+      assert.equal(r1.length, 1);
+      updateReminderStatus(r1[0].item.id, "sent");
+
+      // 2通目 due（さらに 24h 後）→ 3通目スケジュール
+      const r2 = buildDueReminderMessages(
+        new Date(Date.now() + 25 * 60 * 60 * 1000 + 25 * 60 * 60 * 1000),
+      );
+      assert.equal(r2.length,           1, "2通目が due");
+      assert.equal(r2[0].item.sendCount, 2);
+      updateReminderStatus(r2[0].item.id, "sent");
+
+      // 3通目が due になる時刻（さらに 36h 後）
+      const r3 = buildDueReminderMessages(
+        new Date(Date.now() + 25 * 60 * 60 * 1000 + 25 * 60 * 60 * 1000 + 37 * 60 * 60 * 1000),
+      );
+      assert.equal(r3.length,           1,   "3通目が due");
+      assert.equal(r3[0].item.sendCount, 3);
+      assert.equal(r3[0].item.customerId, 209);
+    });
+
+    it("3通目 due 処理時に positive の3通目文面が使われる", () => {
+      const url = "https://example.com/pay";
+      scheduleReminder(210, url, "positive", "hot");
+
+      const r1 = buildDueReminderMessages(new Date(Date.now() + 4 * 60 * 60 * 1000));
+      updateReminderStatus(r1[0].item.id, "sent");
+
+      const r2 = buildDueReminderMessages(
+        new Date(Date.now() + 4 * 60 * 60 * 1000 + 13 * 60 * 60 * 1000),
+      );
+      updateReminderStatus(r2[0].item.id, "sent");
+
+      const r3 = buildDueReminderMessages(
+        new Date(Date.now() + 4 * 60 * 60 * 1000 + 13 * 60 * 60 * 1000 + 19 * 60 * 60 * 1000),
+      );
+      assert.equal(r3.length, 1);
+      assert.ok(r3[0].message.includes("これが最後のご案内になります"), "positive 3通目文面");
+      assert.ok(r3[0].message.includes(url));
+    });
+
+    it("3通目 due 処理時に hold の3通目文面が使われる", () => {
+      const url = "https://example.com/pay";
+      scheduleReminder(211, url, "hold", "warm");
+
+      const r1 = buildDueReminderMessages(new Date(Date.now() + 13 * 60 * 60 * 1000));
+      updateReminderStatus(r1[0].item.id, "sent");
+
+      const r2 = buildDueReminderMessages(
+        new Date(Date.now() + 13 * 60 * 60 * 1000 + 19 * 60 * 60 * 1000),
+      );
+      updateReminderStatus(r2[0].item.id, "sent");
+
+      const r3 = buildDueReminderMessages(
+        new Date(Date.now() + 13 * 60 * 60 * 1000 + 19 * 60 * 60 * 1000 + 25 * 60 * 60 * 1000),
+      );
+      assert.equal(r3.length, 1);
+      assert.ok(r3[0].message.includes("ここまで見ていただきありがとうございます"), "hold 3通目文面");
+      assert.ok(r3[0].message.includes(url));
+    });
+
+    it("3通目処理後にさらに4通目は作成されない", () => {
+      const url = "https://example.com/pay";
+      scheduleReminder(212, url, "positive", "cold");
+
+      const r1 = buildDueReminderMessages(new Date(Date.now() + 25 * 60 * 60 * 1000));
+      updateReminderStatus(r1[0].item.id, "sent");
+
+      const r2 = buildDueReminderMessages(
+        new Date(Date.now() + 25 * 60 * 60 * 1000 + 25 * 60 * 60 * 1000),
+      );
+      updateReminderStatus(r2[0].item.id, "sent");
+
+      const r3 = buildDueReminderMessages(
+        new Date(Date.now() + 25 * 60 * 60 * 1000 + 25 * 60 * 60 * 1000 + 37 * 60 * 60 * 1000),
+      );
+      assert.equal(r3[0].item.sendCount, 3);
+      updateReminderStatus(r3[0].item.id, "sent");
+
+      // さらに先の時刻でも4通目は作成されていない
+      const r4 = buildDueReminderMessages(
+        new Date(Date.now() + 200 * 60 * 60 * 1000),
+      );
+      assert.equal(r4.length, 0, "4通目は作成されない");
+    });
+
+    it("クリック済みなら3通目は作成されない", () => {
+      const url = "https://example.com/pay";
+      scheduleReminder(213, url, "positive", "cold");
+
+      // 1通目 due 処理前にクリック
+      markReminderClicked(213);
+
+      const r1 = buildDueReminderMessages(new Date(Date.now() + 25 * 60 * 60 * 1000));
+      assert.equal(r1.length, 0, "クリック済みは due に含まれない");
+
+      const r3 = getDueReminders(new Date(Date.now() + 200 * 60 * 60 * 1000));
+      assert.equal(r3.length, 0, "3通目も作成されていない");
     });
   });
 });

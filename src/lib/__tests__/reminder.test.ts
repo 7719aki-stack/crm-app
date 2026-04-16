@@ -905,14 +905,14 @@ describe("ABテスト variant", () => {
     );
   });
 
-  it("scheduleReminder を複数回呼ぶと A と B の両方が生成される（確率テスト）", () => {
+  it("scheduleReminder は常に B を生成する（B 固定）", () => {
     const variants = new Set<string>();
     for (let i = 0; i < 50; i++) {
       const it2 = scheduleReminder(400 + i, "https://example.com/pay", "positive", "cold");
       if (it2) variants.add(it2.variant);
     }
-    assert.ok(variants.has("A"), "A が生成されること");
-    assert.ok(variants.has("B"), "B が生成されること");
+    assert.ok(!variants.has("A"), "A は生成されないこと");
+    assert.ok(variants.has("B"),  "B のみ生成されること");
   });
 
   // ── scheduleSecondReminder — variant 伝播 ─────────────────────────────────
@@ -989,18 +989,14 @@ describe("ABテスト variant", () => {
 
   // ── buildDueReminderMessages — variant がメッセージに反映される ───────────
 
-  it("buildDueReminderMessages: variant A の item は A 文面を使う", () => {
-    // Math.random を固定して variant A を強制
-    const origRandom = Math.random;
-    Math.random = () => 0.1; // < 0.5 → A
+  it("buildDueReminderMessages: 常に variant B の item として B 文面を使う", () => {
     const url = "https://example.com/pay";
     scheduleReminder(303, url, "positive", "cold");
-    Math.random = origRandom;
 
     const results = buildDueReminderMessages(new Date(Date.now() + 25 * 60 * 60 * 1000));
     assert.equal(results.length, 1);
-    assert.equal(results[0].item.variant, "A");
-    assert.ok(results[0].message.includes("今のうちに進めておくと楽です"), "A 文面が使われること");
+    assert.equal(results[0].item.variant, "B");
+    assert.ok(results[0].message.includes("後回しが一番損です"), "B 文面が使われること");
   });
 
   it("buildDueReminderMessages: variant B の item は B 文面を使う", () => {

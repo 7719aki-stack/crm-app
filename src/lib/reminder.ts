@@ -113,7 +113,7 @@ export function scheduleReminder(
 
   const now      = new Date();
   const delayMs  = resolveReminderDelayHours(phase) * 60 * 60 * 1000;
-  const variant  = Math.random() < 0.5 ? "A" : "B";
+  const variant  = "B"; // ABテスト結果: B（強訴求）に固定
   const item: ReminderItem = {
     id:          `reminder_${Date.now()}_${customerId}`,
     customerId,

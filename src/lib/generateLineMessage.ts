@@ -110,6 +110,47 @@ const PHASE_BODY: Record<CustomerPhase, { situation: string; offer: string; acti
   ],
 };
 
+// ── 商品別フック文 ────────────────────────────────────────────────────────────
+// productName の部分一致で判定し、その商品ならではの「なぜ今これが必要か」を返す。
+
+const PRODUCT_HOOKS: { keywords: string[]; hook: string }[] = [
+  {
+    keywords: ["逆転アクション"],
+    hook: "今の状況を変えるための具体的な一手を、一緒に設計します。",
+  },
+  {
+    keywords: ["深層心理"],
+    hook: "相手の深層にある本音と、この関係の核心を読み解きます。",
+  },
+  {
+    keywords: ["運命修正"],
+    hook: "今の流れそのものを変えるための、根本からのアプローチです。",
+  },
+  {
+    keywords: ["完全逆転"],
+    hook: "この関係を根本から逆転させる、最上位の鑑定プログラムです。",
+  },
+  {
+    keywords: ["深層恋愛鑑定", "恋愛鑑定"],
+    hook: "今の感情の流れと相手の本音を、鑑定で丁寧に読み解きます。",
+  },
+];
+
+const PRODUCT_HOOK_DEFAULT =
+  "今の状況をより深く整理するための、一歩進んだ鑑定です。";
+
+/**
+ * 商品名から対応するフック文を返す。
+ * productName が未指定、またはどのキーワードにも一致しない場合はデフォルト文を返す。
+ */
+export function resolveProductHook(productName?: string): string {
+  if (!productName) return PRODUCT_HOOK_DEFAULT;
+  const entry = PRODUCT_HOOKS.find((e) =>
+    e.keywords.some((kw) => productName.includes(kw)),
+  );
+  return entry?.hook ?? PRODUCT_HOOK_DEFAULT;
+}
+
 // ── ユーティリティ ────────────────────────────────────────────────────────────
 
 function pickEmpathy(tags: string[]): string {
@@ -141,9 +182,11 @@ export function generateLineMessage({
   productName,
 }: GenerateLineMessageOptions): string {
   const empathy = pickEmpathy(tags);
+  const hook    = resolveProductHook(productName);
   const body    = pickRandom(PHASE_BODY[phase]);
 
-  const parts: string[] = [empathy, "", body.situation];
+  // 構成: 共感 → フック → 状況整理 → オファー（商品名あり時） → アクション
+  const parts: string[] = [empathy, "", hook, "", body.situation];
 
   if (productName) {
     parts.push("", fillProduct(body.offer, productName));

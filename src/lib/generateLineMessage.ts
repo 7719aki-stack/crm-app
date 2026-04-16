@@ -266,11 +266,11 @@ export function generateLineMessage({
  */
 export function sendReminderMessage(paymentUrl: string): string {
   return [
-    "さっきの内容、まだ見れていない可能性があるので再送します👇",
+    "念のためもう一度お送りします👇",
     "",
     paymentUrl,
     "",
-    "※今のタイミングで動くかどうかで、結果は大きく変わります",
+    "※今の状態を整理しておくと、この先の動きがかなり楽になります",
   ].join("\n");
 }
 

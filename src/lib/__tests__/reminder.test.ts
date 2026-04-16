@@ -50,9 +50,9 @@ describe("sendReminderMessage", () => {
     const url = "https://luna-gemnia.stores.jp/items/test123";
     const msg = sendReminderMessage(url);
 
-    assert.ok(msg.includes(url),        "URL が含まれること");
-    assert.ok(msg.includes("再送します"), "再送の文言が含まれること");
-    assert.ok(msg.includes("タイミング"), "緊急性の文言が含まれること");
+    assert.ok(msg.includes(url),          "URL が含まれること");
+    assert.ok(msg.includes("お送りします"), "再送の文言が含まれること");
+    assert.ok(msg.includes("整理しておく"), "フォロー文言が含まれること");
   });
 
   it("異なる URL でも正しく埋め込まれる", () => {
@@ -170,7 +170,7 @@ describe("buildDueReminderMessages", () => {
     assert.equal(results.length,                       1);
     assert.equal(results[0].item.customerId,           40);
     assert.ok(results[0].message.includes(url));
-    assert.ok(results[0].message.includes("再送します"));
+    assert.ok(results[0].message.includes("お送りします"));
   });
 
   it("クリック済みはメッセージ生成対象外", () => {

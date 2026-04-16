@@ -2,8 +2,10 @@
 // 鑑定文の後ろにそのまま貼れる、売り込まない短文テンプレを生成する。
 // ルール：商品1つだけ / 「必要であれば」必須 / 「気になる場合だけ」必須
 
-import { getRecommendedProducts } from "./getRecommendedProducts";
+import { getRecommendedProducts, resolvePhase } from "./getRecommendedProducts";
+import type { CustomerContext } from "./getRecommendedProducts";
 import type { OfferProduct } from "./products";
+import { generateLineMessage } from "./generateLineMessage";
 
 // ── タグ別の前置き ──────────────────────────────────────────────
 
@@ -65,4 +67,29 @@ export function generateOfferMessage(
     "",
     action,
   ].join("\n");
+}
+
+// ── フェーズ連動オファーメッセージ生成 ──────────────────────────────────────
+// generateLineMessage を使い、顧客フェーズに合わせた LINE 文章を返す。
+// page.tsx などから ctx（tags / funnel_stage / purchases / category / temperature）を
+// 渡すだけで動く。presets はカスタム料金プリセットの任意注入。
+
+export function generatePhaseOfferMessage(
+  ctx: CustomerContext,
+  presets?: OfferProduct[],
+): string {
+  const phase    = resolvePhase(ctx);
+  const products = getRecommendedProducts(ctx, presets);
+
+  // アップセル商品を優先、なければメイン商品、それもなければ商品名なしで生成
+  const product =
+    products.find((p) => p.type === "upsell") ??
+    products.find((p) => p.type === "main")   ??
+    products[0];
+
+  return generateLineMessage({
+    phase,
+    tags:        ctx.tags,
+    productName: product?.name,
+  });
 }

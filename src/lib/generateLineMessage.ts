@@ -151,6 +151,34 @@ export function resolveProductHook(productName?: string): string {
   return entry?.hook ?? PRODUCT_HOOK_DEFAULT;
 }
 
+// ── フェーズ別緊急性メッセージ ────────────────────────────────────────────────
+// 煽りすぎず、「今動く理由」を自然に添える一文。
+
+const URGENCY_BY_PHASE: Record<CustomerPhase, string[]> = {
+  cold: [
+    "今感じている不安は、早めに整理しておくほど動きやすくなります。",
+    "タイミングは、自分が思っているより早く過ぎていきます。",
+    "今の状態を放っておくと、気持ちが固まる前に流れが変わってしまうことがあります。",
+  ],
+  warm: [
+    "迷っている間にも、状況は少しずつ動いています。",
+    "ここで一度立ち止まって確認しておくことで、後の判断がずっとラクになります。",
+    "確認できるタイミングは、今が一番いいと感じています。",
+  ],
+  hot: [
+    "今がその「動くべき瞬間」だと感じています。",
+    "ここで一歩踏み出すか、また様子を見るかが、これからの流れを分けます。",
+    "このまま時間が経つほど、動き出すタイミングが難しくなっていきます。",
+  ],
+};
+
+/**
+ * フェーズに対応した緊急性メッセージをランダムで返す。
+ */
+export function resolveUrgencyMessage(phase: CustomerPhase): string {
+  return pickRandom(URGENCY_BY_PHASE[phase]);
+}
+
 // ── ユーティリティ ────────────────────────────────────────────────────────────
 
 function pickEmpathy(tags: string[]): string {
@@ -184,9 +212,10 @@ export function generateLineMessage({
   const empathy = pickEmpathy(tags);
   const hook    = resolveProductHook(productName);
   const body    = pickRandom(PHASE_BODY[phase]);
+  const urgency = resolveUrgencyMessage(phase);
 
-  // 構成: 共感 → フック → 状況整理 → オファー（商品名あり時） → アクション
-  const parts: string[] = [empathy, "", hook, "", body.situation];
+  // 構成: 共感 → フック → 状況整理 → 緊急性 → オファー（商品名あり時） → アクション
+  const parts: string[] = [empathy, "", hook, "", body.situation, "", urgency];
 
   if (productName) {
     parts.push("", fillProduct(body.offer, productName));

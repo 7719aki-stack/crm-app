@@ -257,6 +257,23 @@ export function generateLineMessage({
   return parts.join("\n");
 }
 
+// ── リマインダーメッセージ生成 ────────────────────────────────────────────────
+// positive 後に URL 未クリックの場合、24時間後に再送するメッセージを生成する。
+
+/**
+ * 決済URLを再送するリマインダーメッセージを生成する。
+ * 呼び出し条件: intent === "positive" かつ hasClicked === false かつ 24時間経過
+ */
+export function sendReminderMessage(paymentUrl: string): string {
+  return [
+    "さっきの内容、まだ見れていない可能性があるので再送します👇",
+    "",
+    paymentUrl,
+    "",
+    "※今のタイミングで動くかどうかで、結果は大きく変わります",
+  ].join("\n");
+}
+
 // ── クロージングメッセージ生成 ────────────────────────────────────────────────
 // positive 返信に対して「確実に成約に繋げる」専用メッセージを生成する。
 // 構成: お礼 → 行動後押し → 限定性/緊急性 → CTA（URL）

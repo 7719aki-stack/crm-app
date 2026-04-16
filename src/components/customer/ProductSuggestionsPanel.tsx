@@ -4,9 +4,9 @@ import { type OfferProduct } from "@/lib/products";
 import type { CustomerPhase } from "@/lib/getRecommendedProducts";
 
 const PHASE_CTA: Record<CustomerPhase, string> = {
-  cold: "まずは今の状況を整理してみる",
-  warm: "もう少し詳しく見てみる",
-  hot:  "このまま結果を変えにいく",
+  cold: "不安を整理して、今の状態を見てみる",
+  warm: "このまま進んだ場合の結果を確認する",
+  hot:  "この流れを変えにいく",
 };
 const FALLBACK_CTA = "この内容で送信";
 

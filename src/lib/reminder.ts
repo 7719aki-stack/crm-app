@@ -15,10 +15,11 @@ export interface ReminderItem {
   paymentUrl:  string;
   intent:      "positive" | "hold";
   phase:       string;
-  scheduledAt: string;  // ISO datetime（intent 検出時 + phase 別遅延）
+  scheduledAt: string;       // ISO datetime（intent 検出時 + phase 別遅延）
   hasClicked:  boolean;
+  clickedAt:   string | null; // クリック時刻（未クリックは null）
   status:      ReminderStatus;
-  sendCount:   number;  // 1通目=1, 2通目=2, 3通目=3
+  sendCount:   number;        // 1通目=1, 2通目=2, 3通目=3
 }
 
 // ── 定数 ──────────────────────────────────────────────────────────────────────
@@ -119,6 +120,7 @@ export function scheduleReminder(
     phase,
     scheduledAt: new Date(now.getTime() + delayMs).toISOString(),
     hasClicked:  false,
+    clickedAt:   null,
     status:      "pending",
     sendCount:   1,
   };
@@ -129,17 +131,26 @@ export function scheduleReminder(
 
 /**
  * 顧客が決済URLをクリックしたことを記録する。
+ * hasClicked = true、clickedAt = クリック時刻（ISO 文字列）を保存する。
  * クリック済みの場合、リマインダーは送信されない。
  */
 export function markReminderClicked(customerId: number): void {
-  const all = lsRead();
+  const all       = lsRead();
+  const clickedAt = new Date().toISOString();
   lsWrite(
     all.map((item) =>
       item.customerId === customerId && item.status === "pending"
-        ? { ...item, hasClicked: true }
+        ? { ...item, hasClicked: true, clickedAt }
         : item,
     ),
   );
+}
+
+/**
+ * キューに登録されているすべてのリマインダーを返す（テスト・デバッグ用）。
+ */
+export function getReminderQueue(): ReminderItem[] {
+  return lsRead();
 }
 
 /**
@@ -199,6 +210,7 @@ export function scheduleSecondReminder(firstItem: ReminderItem): ReminderItem | 
     phase:       firstItem.phase,
     scheduledAt: new Date(now.getTime() + delayMs).toISOString(),
     hasClicked:  false,
+    clickedAt:   null,
     status:      "pending",
     sendCount:   2,
   };
@@ -243,6 +255,7 @@ export function scheduleThirdReminder(secondItem: ReminderItem): ReminderItem | 
     phase:       secondItem.phase,
     scheduledAt: new Date(now.getTime() + delayMs).toISOString(),
     hasClicked:  false,
+    clickedAt:   null,
     status:      "pending",
     sendCount:   3,
   };

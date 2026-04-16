@@ -37,6 +37,7 @@ import {
   scheduleThirdReminder,
   markReminderClicked,
   getDueReminders,
+  getReminderQueue,
   updateReminderStatus,
   buildDueReminderMessages,
 } from "../reminder";
@@ -228,6 +229,42 @@ describe("markReminderClicked", () => {
     const due = getDueReminders(new Date(Date.now() + 25 * 60 * 60 * 1000));
     assert.equal(due.length,          1);
     assert.equal(due[0].hasClicked,   false);
+  });
+
+  it("作成直後の clickedAt は null", () => {
+    const item = scheduleReminder(22, "https://example.com/pay", "positive", "cold")!;
+    assert.equal(item.clickedAt, null);
+  });
+
+  it("クリック時に clickedAt が ISO 文字列で記録される", () => {
+    scheduleReminder(23, "https://example.com/pay", "positive", "cold");
+
+    const before = new Date().toISOString();
+    markReminderClicked(23);
+    const after  = new Date().toISOString();
+
+    const queue   = getReminderQueue();
+    const clicked = queue.find((i) => i.customerId === 23)!;
+
+    assert.ok(clicked.hasClicked,                  "hasClicked が true");
+    assert.ok(clicked.clickedAt !== null,           "clickedAt が null でない");
+    assert.ok(clicked.clickedAt! >= before,         "クリック時刻 >= before");
+    assert.ok(clicked.clickedAt! <= after,          "クリック時刻 <= after");
+  });
+
+  it("未クリックの item は clickedAt が null のまま", () => {
+    scheduleReminder(24, "https://example.com/pay", "hold", "cold");
+
+    const due = getDueReminders(new Date(Date.now() + 25 * 60 * 60 * 1000));
+    assert.equal(due[0].clickedAt, null);
+  });
+
+  it("クリック後のリマインダー停止: buildDueReminderMessages で返ってこない", () => {
+    scheduleReminder(25, "https://example.com/pay", "positive", "cold");
+    markReminderClicked(25);
+
+    const results = buildDueReminderMessages(new Date(Date.now() + 25 * 60 * 60 * 1000));
+    assert.equal(results.length, 0, "クリック済みはメッセージ生成対象外");
   });
 });
 

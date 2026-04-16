@@ -3,6 +3,7 @@
 // AI は使わずローカルのパーツ定義から生成する。
 
 import type { CustomerPhase } from "./getRecommendedProducts";
+import type { ReplyIntent } from "./resolveReplyIntent";
 
 // ── 型定義 ───────────────────────────────────────────────────────────────────
 
@@ -254,4 +255,68 @@ export function generateLineMessage({
   parts.push("", choiceCTA);
 
   return parts.join("\n");
+}
+
+// ── フォローアップメッセージ生成 ──────────────────────────────────────────────
+// resolveReplyIntent の結果 × フェーズ × 商品名 から次の返信文を生成する。
+
+const FOLLOWUP_POSITIVE: Record<CustomerPhase, string[]> = {
+  cold: [
+    "ありがとうございます。\n今の状況を整理しながら、丁寧にご案内していきますね。",
+    "ありがとうございます。\nまず今どこにいるかを一緒に確認していきましょう。",
+  ],
+  warm: [
+    "ありがとうございます。\nこのまま具体的な内容をご案内しますね。",
+    "ありがとうございます。\n確認できるタイミングに動いてくれてよかったです。一緒に進めていきましょう。",
+  ],
+  hot: [
+    "ありがとうございます。\nこのまま具体的な内容をご案内しますね。",
+    "ありがとうございます。\n今動き出せたこと、きっといい流れになります。すぐにご案内します。",
+  ],
+};
+
+const FOLLOWUP_HOLD: Record<CustomerPhase, string[]> = {
+  cold: [
+    "承知しました。\n迷うのは自然なことです。\n判断しやすいように、必要なポイントだけ整理してお伝えできます。",
+    "もちろんです。\nゆっくり考えてくださいね。\n何か気になることがあればいつでも聞いてください。",
+  ],
+  warm: [
+    "承知しました。\n迷うのは自然なことです。\n判断しやすいように、必要なポイントだけ整理してお伝えできます。",
+    "わかりました。\n確認したいことや不安なことがあれば、気軽に聞いてくださいね。",
+  ],
+  hot: [
+    "承知しました。\n迷うのは自然なことです。\n判断しやすいように、必要なポイントだけ整理してお伝えできます。",
+    "わかりました。\nただ、今の流れを考えると早めに確認しておく方がいいと感じています。\n気になることがあれば何でも聞いてください。",
+  ],
+};
+
+const FOLLOWUP_UNKNOWN =
+  "ありがとうございます。\n今のお気持ちに合わせてご案内したいので、\n①進めたい\n②少し考えたい\nのどちらかを返していただけますか？";
+
+export interface GenerateFollowupMessageOptions {
+  intent:       ReplyIntent;
+  phase:        CustomerPhase;
+  productName?: string;
+}
+
+/**
+ * 返信意図 × フェーズ × 商品名 から次の返信文を生成する。
+ * positive / hold はフェーズ別の文言、unknown は再質問を促す共通文を返す。
+ */
+export function generateFollowupMessage({
+  intent,
+  phase,
+  productName,
+}: GenerateFollowupMessageOptions): string {
+  if (intent === "unknown") {
+    return FOLLOWUP_UNKNOWN;
+  }
+
+  const pool   = intent === "positive" ? FOLLOWUP_POSITIVE : FOLLOWUP_HOLD;
+  const base   = pickRandom(pool[phase]);
+  const suffix = productName && intent === "positive"
+    ? `\n\n${productName}について、詳しくご案内しますね。`
+    : "";
+
+  return base + suffix;
 }

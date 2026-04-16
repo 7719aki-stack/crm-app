@@ -4,6 +4,14 @@ import { useState, useEffect, useRef } from "react";
 import type { ActionEntry } from "@/app/customers/dummyData";
 import { saveCustomerMessageDraft } from "@/lib/messageDraft";
 import { generateAdaptiveDraft, type DraftCandidate } from "@/lib/generateAdaptiveDraft";
+import type { CustomerPhase } from "@/lib/getRecommendedProducts";
+
+const PHASE_CTA: Record<CustomerPhase, string> = {
+  cold: "まずは今の状況を整理してみる",
+  warm: "もう少し詳しく見てみる",
+  hot:  "このまま結果を変えにいく",
+};
+const FALLBACK_CTA = "この内容で送信";
 
 const TONES = ["共感", "背中押し", "アップセル", "報告受け", "フォロー"] as const;
 type Tone = typeof TONES[number];
@@ -32,12 +40,14 @@ interface Props {
   customerTags?:   string[];
   /** 下書き生成に使う顧客ステータス（StatusId文字列） */
   customerStatus?: string;
+  /** 顧客フェーズ（CTA文言の切り替えに使う） */
+  customerPhase?: CustomerPhase;
 }
 
 type Phase = "input" | "confirm" | "sending" | "done" | "error";
 type DraftConfirmMode = "replace" | "append" | null;
 
-export function LineSendPanel({ customerId, line_user_id, onSent, injectText, injectKey, onEdit, onToneChange, customerTags, customerStatus }: Props) {
+export function LineSendPanel({ customerId, line_user_id, onSent, injectText, injectKey, onEdit, onToneChange, customerTags, customerStatus, customerPhase }: Props) {
   const [text,              setText]              = useState("");
   const [selectedTone,      setSelectedTone]      = useState<Tone>("共感");
   const [nextAction,        setNextAction]         = useState("");
@@ -409,7 +419,9 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
             : "bg-gray-200 text-gray-400 cursor-not-allowed"
         }`}
       >
-        確認する →
+        {canSend
+          ? (customerPhase ? PHASE_CTA[customerPhase] : FALLBACK_CTA)
+          : FALLBACK_CTA}
       </button>
 
       {disabledReason ? (

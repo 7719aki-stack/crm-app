@@ -1,12 +1,21 @@
 "use client";
 
 import { type OfferProduct } from "@/lib/products";
+import type { CustomerPhase } from "@/lib/getRecommendedProducts";
+
+const PHASE_CTA: Record<CustomerPhase, string> = {
+  cold: "まずは今の状況を整理してみる",
+  warm: "もう少し詳しく見てみる",
+  hot:  "このまま結果を変えにいく",
+};
+const FALLBACK_CTA = "この内容で送信";
 
 type Props = {
   products: OfferProduct[];
+  customerPhase?: CustomerPhase;
 };
 
-export default function ProductSuggestionsPanel({ products }: Props) {
+export default function ProductSuggestionsPanel({ products, customerPhase }: Props) {
   if (products.length === 0) return null;
 
   return (
@@ -53,7 +62,7 @@ export default function ProductSuggestionsPanel({ products }: Props) {
                   : "text-brand-600 bg-brand-50 border border-brand-200 hover:bg-brand-100"
               }`}
             >
-              詳しく見る
+              {customerPhase ? PHASE_CTA[customerPhase] : FALLBACK_CTA}
               <svg
                 className="w-3 h-3"
                 fill="none"

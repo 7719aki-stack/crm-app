@@ -18,7 +18,7 @@ import MessageDraftPanel from "@/components/customer/MessageDraftPanel";
 import DiagnosisPanel from "@/components/customer/DiagnosisPanel";
 import DiagnosisTemplateSuggestionsPanel from "@/components/customer/DiagnosisTemplateSuggestionsPanel";
 import { generateReplyCandidates } from "@/lib/generateReplyCandidates";
-import { getRecommendedProducts } from "@/lib/getRecommendedProducts";
+import { getRecommendedProducts, resolvePhase } from "@/lib/getRecommendedProducts";
 import { generateOfferMessage } from "@/lib/generateOfferMessage";
 import {
   getCustomerMessageDraft,
@@ -345,6 +345,18 @@ export default function CustomerDetailPage() {
     [aiCandidates, tags]
   );
 
+  // ── 顧客フェーズ（CTA文言の切り替えに使う）
+  const customerPhase = useMemo(
+    () => resolvePhase({
+      tags,
+      funnel_stage: customer?.funnel_stage,
+      purchases:    customer?.purchases,
+      category:     customer?.category,
+      temperature:  customer?.temperature,
+    }),
+    [tags, customer?.funnel_stage, customer?.purchases, customer?.category, customer?.temperature]
+  );
+
   // ── ローディング / エラー ─────────────────────────────────
   if (loading) {
     return (
@@ -582,6 +594,7 @@ export default function CustomerDetailPage() {
               }}
               injectText={lineMessage}
               injectKey={lineInjectKey}
+              customerPhase={customerPhase}
               onEdit={(text) => {
                 // ユーザーが LINE送信欄を手動編集（空クリア含む）したとき:
                 // 1. 編集済みフラグを立てる（以降の自動上書きを全てブロック）
@@ -808,16 +821,19 @@ export default function CustomerDetailPage() {
           {/* おすすめ商品 */}
           <SectionCard title="おすすめ商品">
             <div className="space-y-3">
-              <ProductSuggestionsPanel products={getRecommendedProducts(
-                {
-                  tags,
-                  funnel_stage: customer?.funnel_stage,
-                  purchases: customer?.purchases,
-                  category: customer?.category,
-                  temperature: customer?.temperature,
-                },
-                pricePresets.length > 0 ? pricePresets : undefined,
-              )} />
+              <ProductSuggestionsPanel
+                products={getRecommendedProducts(
+                  {
+                    tags,
+                    funnel_stage: customer?.funnel_stage,
+                    purchases: customer?.purchases,
+                    category: customer?.category,
+                    temperature: customer?.temperature,
+                  },
+                  pricePresets.length > 0 ? pricePresets : undefined,
+                )}
+                customerPhase={customerPhase}
+              />
               <OfferMessagePanel
                 message={generateOfferMessage(tags, pricePresets.length > 0 ? pricePresets : undefined)}
                 onUse={(text) => setLineMessage(text)}

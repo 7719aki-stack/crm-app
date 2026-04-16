@@ -1,5 +1,5 @@
 // ─── リマインダー管理 ────────────────────────────────────────────────────────
-// intent === "positive" かつ hasClicked === false の場合に
+// intent === "positive" または intent === "hold" かつ hasClicked === false の場合に
 // 24時間後に自動追撃メッセージを送るための スケジュール・追跡ロジック。
 
 import { sendReminderMessage } from "./generateLineMessage";
@@ -12,7 +12,8 @@ export interface ReminderItem {
   id:          string;
   customerId:  number;
   paymentUrl:  string;
-  scheduledAt: string;  // ISO datetime（positive 検出時 + 24h）
+  intent:      "positive" | "hold";
+  scheduledAt: string;  // ISO datetime（positive / hold 検出時 + 24h）
   hasClicked:  boolean;
   status:      ReminderStatus;
 }
@@ -40,15 +41,19 @@ function lsWrite(items: ReminderItem[]): void {
 // ── 公開関数 ──────────────────────────────────────────────────────────────────
 
 /**
- * positive intent 検出時にリマインダーをスケジュールする。
+ * positive または hold intent 検出時にリマインダーをスケジュールする。
+ * それ以外の intent（unknown など）は登録しない。
  * 同じ customerId の pending が既にある場合は重複作成しない。
  *
- * @returns 作成した ReminderItem、重複時は null
+ * @returns 作成した ReminderItem、対象外 intent または重複時は null
  */
 export function scheduleReminder(
   customerId: number,
   paymentUrl: string,
+  intent: string,
 ): ReminderItem | null {
+  if (intent !== "positive" && intent !== "hold") return null;
+
   const all = lsRead();
 
   const hasPending = all.some(
@@ -61,6 +66,7 @@ export function scheduleReminder(
     id:          `reminder_${Date.now()}_${customerId}`,
     customerId,
     paymentUrl,
+    intent:      intent as "positive" | "hold",
     scheduledAt: new Date(now.getTime() + REMINDER_DELAY_MS).toISOString(),
     hasClicked:  false,
     status:      "pending",
@@ -117,6 +123,6 @@ export function buildDueReminderMessages(
 ): { item: ReminderItem; message: string }[] {
   return getDueReminders(now).map((item) => ({
     item,
-    message: sendReminderMessage(item.paymentUrl),
+    message: sendReminderMessage(item.paymentUrl, item.intent),
   }));
 }

@@ -46,38 +46,81 @@ beforeEach(() => {
 // ─── 1. sendReminderMessage ───────────────────────────────────────────────────
 
 describe("sendReminderMessage", () => {
-  it("URL を含む再送メッセージを返す", () => {
-    const url = "https://luna-gemnia.stores.jp/items/test123";
-    const msg = sendReminderMessage(url);
+  describe("positive", () => {
+    it("URL を含む再送メッセージを返す", () => {
+      const url = "https://luna-gemnia.stores.jp/items/test123";
+      const msg = sendReminderMessage(url, "positive");
 
-    assert.ok(msg.includes(url),          "URL が含まれること");
-    assert.ok(msg.includes("お送りします"), "再送の文言が含まれること");
-    assert.ok(msg.includes("整理しておく"), "フォロー文言が含まれること");
+      assert.ok(msg.includes(url),              "URL が含まれること");
+      assert.ok(msg.includes("念のためもう一度"), "positive 文言が含まれること");
+    });
+
+    it("異なる URL でも正しく埋め込まれる", () => {
+      const url = "https://example.com/pay/999";
+      const msg = sendReminderMessage(url, "positive");
+      assert.ok(msg.includes(url));
+    });
+
+    it("positive 用メッセージに「念のためもう一度」が入る", () => {
+      const msg = sendReminderMessage("https://example.com/pay", "positive");
+      assert.ok(msg.includes("念のためもう一度"));
+    });
+
+    it("positive 用メッセージに hold 文言は入らない", () => {
+      const msg = sendReminderMessage("https://example.com/pay", "positive");
+      assert.ok(!msg.includes("迷っている"));
+    });
   });
 
-  it("異なる URL でも正しく埋め込まれる", () => {
-    const url = "https://example.com/pay/999";
-    const msg = sendReminderMessage(url);
-    assert.ok(msg.includes(url));
+  describe("hold", () => {
+    it("hold 用メッセージに「迷っている」が入る", () => {
+      const msg = sendReminderMessage("https://example.com/pay", "hold");
+      assert.ok(msg.includes("迷っている"));
+    });
+
+    it("hold 用メッセージに URL が含まれる", () => {
+      const url = "https://example.com/pay/hold";
+      const msg = sendReminderMessage(url, "hold");
+      assert.ok(msg.includes(url));
+    });
+
+    it("hold 用メッセージに positive 文言は入らない", () => {
+      const msg = sendReminderMessage("https://example.com/pay", "hold");
+      assert.ok(!msg.includes("念のためもう一度"));
+    });
   });
 });
 
 // ─── 2. scheduleReminder ─────────────────────────────────────────────────────
 
 describe("scheduleReminder", () => {
-  it("リマインダーを正常に作成する", () => {
-    const item = scheduleReminder(1, "https://luna-gemnia.stores.jp/items/aaa");
+  it("positive でリマインダーを正常に作成する", () => {
+    const item = scheduleReminder(1, "https://luna-gemnia.stores.jp/items/aaa", "positive");
 
     assert.notEqual(item, null);
     assert.equal(item!.customerId,  1);
     assert.equal(item!.paymentUrl,  "https://luna-gemnia.stores.jp/items/aaa");
+    assert.equal(item!.intent,      "positive");
     assert.equal(item!.status,      "pending");
     assert.equal(item!.hasClicked,  false);
   });
 
+  it("hold でリマインダーを正常に作成する", () => {
+    const item = scheduleReminder(2, "https://example.com/pay", "hold");
+
+    assert.notEqual(item, null);
+    assert.equal(item!.intent,  "hold");
+    assert.equal(item!.status,  "pending");
+  });
+
+  it("unknown は登録対象外（null を返す）", () => {
+    const item = scheduleReminder(999, "https://example.com/pay", "unknown");
+    assert.equal(item, null);
+  });
+
   it("scheduledAt が現在時刻の約 24 時間後になっている", () => {
     const before = Date.now();
-    const item   = scheduleReminder(2, "https://example.com/pay")!;
+    const item   = scheduleReminder(3, "https://example.com/pay", "positive")!;
     const after  = Date.now();
 
     const scheduled = new Date(item.scheduledAt).getTime();
@@ -88,14 +131,14 @@ describe("scheduleReminder", () => {
   });
 
   it("同じ顧客に pending が既にある場合は null を返す（重複防止）", () => {
-    scheduleReminder(3, "https://example.com/pay");
-    const dup = scheduleReminder(3, "https://example.com/pay2");
+    scheduleReminder(10, "https://example.com/pay", "positive");
+    const dup = scheduleReminder(10, "https://example.com/pay2", "positive");
     assert.equal(dup, null);
   });
 
   it("別顧客は独立してスケジュールできる", () => {
-    const a = scheduleReminder(10, "https://example.com/a");
-    const b = scheduleReminder(11, "https://example.com/b");
+    const a = scheduleReminder(11, "https://example.com/a", "positive");
+    const b = scheduleReminder(12, "https://example.com/b", "hold");
     assert.notEqual(a, null);
     assert.notEqual(b, null);
   });
@@ -105,7 +148,7 @@ describe("scheduleReminder", () => {
 
 describe("markReminderClicked", () => {
   it("クリック後は getDueReminders に含まれない", () => {
-    scheduleReminder(20, "https://example.com/pay");
+    scheduleReminder(20, "https://example.com/pay", "positive");
     markReminderClicked(20);
 
     const due = getDueReminders(new Date(Date.now() + 25 * 60 * 60 * 1000));
@@ -113,7 +156,7 @@ describe("markReminderClicked", () => {
   });
 
   it("クリックされていない場合はリマインダー対象のまま", () => {
-    scheduleReminder(21, "https://example.com/pay");
+    scheduleReminder(21, "https://example.com/pay", "hold");
 
     const due = getDueReminders(new Date(Date.now() + 25 * 60 * 60 * 1000));
     assert.equal(due.length,          1);
@@ -125,14 +168,14 @@ describe("markReminderClicked", () => {
 
 describe("getDueReminders", () => {
   it("24時間未満では返さない", () => {
-    scheduleReminder(30, "https://example.com/pay");
+    scheduleReminder(30, "https://example.com/pay", "positive");
 
     const due = getDueReminders(new Date(Date.now() + 23 * 60 * 60 * 1000));
     assert.equal(due.length, 0);
   });
 
   it("24時間経過後に返す", () => {
-    scheduleReminder(31, "https://example.com/pay");
+    scheduleReminder(31, "https://example.com/pay", "positive");
 
     const due = getDueReminders(new Date(Date.now() + 25 * 60 * 60 * 1000));
     assert.equal(due.length,          1);
@@ -140,7 +183,7 @@ describe("getDueReminders", () => {
   });
 
   it("sent ステータスは返さない", () => {
-    const item = scheduleReminder(32, "https://example.com/pay")!;
+    const item = scheduleReminder(32, "https://example.com/pay", "hold")!;
     updateReminderStatus(item.id, "sent");
 
     const due = getDueReminders(new Date(Date.now() + 25 * 60 * 60 * 1000));
@@ -148,7 +191,7 @@ describe("getDueReminders", () => {
   });
 
   it("cancelled ステータスは返さない", () => {
-    const item = scheduleReminder(33, "https://example.com/pay")!;
+    const item = scheduleReminder(33, "https://example.com/pay", "hold")!;
     updateReminderStatus(item.id, "cancelled");
 
     const due = getDueReminders(new Date(Date.now() + 25 * 60 * 60 * 1000));
@@ -159,9 +202,9 @@ describe("getDueReminders", () => {
 // ─── 5. buildDueReminderMessages ─────────────────────────────────────────────
 
 describe("buildDueReminderMessages", () => {
-  it("期限到来かつ未クリックのアイテムに対してメッセージを生成する", () => {
+  it("positive: 期限到来かつ未クリックのアイテムに positive 文面を生成する", () => {
     const url = "https://luna-gemnia.stores.jp/items/xyz";
-    scheduleReminder(40, url);
+    scheduleReminder(40, url, "positive");
 
     const results = buildDueReminderMessages(
       new Date(Date.now() + 25 * 60 * 60 * 1000),
@@ -170,11 +213,25 @@ describe("buildDueReminderMessages", () => {
     assert.equal(results.length,                       1);
     assert.equal(results[0].item.customerId,           40);
     assert.ok(results[0].message.includes(url));
-    assert.ok(results[0].message.includes("お送りします"));
+    assert.ok(results[0].message.includes("念のためもう一度"));
+  });
+
+  it("hold: 期限到来かつ未クリックのアイテムに hold 文面を生成する", () => {
+    const url = "https://luna-gemnia.stores.jp/items/hold";
+    scheduleReminder(43, url, "hold");
+
+    const results = buildDueReminderMessages(
+      new Date(Date.now() + 25 * 60 * 60 * 1000),
+    );
+
+    assert.equal(results.length,                       1);
+    assert.equal(results[0].item.customerId,           43);
+    assert.ok(results[0].message.includes(url));
+    assert.ok(results[0].message.includes("迷っている"));
   });
 
   it("クリック済みはメッセージ生成対象外", () => {
-    scheduleReminder(41, "https://example.com/pay");
+    scheduleReminder(41, "https://example.com/pay", "positive");
     markReminderClicked(41);
 
     const results = buildDueReminderMessages(
@@ -184,7 +241,7 @@ describe("buildDueReminderMessages", () => {
   });
 
   it("24時間未満はメッセージ生成対象外", () => {
-    scheduleReminder(42, "https://example.com/pay");
+    scheduleReminder(42, "https://example.com/pay", "hold");
 
     const results = buildDueReminderMessages(
       new Date(Date.now() + 23 * 60 * 60 * 1000),

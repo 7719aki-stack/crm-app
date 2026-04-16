@@ -20,6 +20,7 @@ export interface ReminderItem {
   clickedAt:   string | null; // クリック時刻（未クリックは null）
   status:      ReminderStatus;
   sendCount:   number;        // 1通目=1, 2通目=2, 3通目=3
+  variant:     "A" | "B";    // ABテスト用バリアント（A:シンプル / B:訴求強め）
 }
 
 // ── 定数 ──────────────────────────────────────────────────────────────────────
@@ -112,6 +113,7 @@ export function scheduleReminder(
 
   const now      = new Date();
   const delayMs  = resolveReminderDelayHours(phase) * 60 * 60 * 1000;
+  const variant  = Math.random() < 0.5 ? "A" : "B";
   const item: ReminderItem = {
     id:          `reminder_${Date.now()}_${customerId}`,
     customerId,
@@ -123,6 +125,7 @@ export function scheduleReminder(
     clickedAt:   null,
     status:      "pending",
     sendCount:   1,
+    variant,
   };
 
   lsWrite([...all, item]);
@@ -137,6 +140,20 @@ export function scheduleReminder(
 export function markReminderClicked(customerId: number): void {
   const all       = lsRead();
   const clickedAt = new Date().toISOString();
+
+  // クリックされたアイテムを特定してログ出力
+  const target = all.find(
+    (item) => item.customerId === customerId && item.status === "pending",
+  );
+  if (target) {
+    console.log({
+      customerId: target.customerId,
+      sendCount:  target.sendCount,
+      variant:    target.variant,
+      clickedAt,
+    });
+  }
+
   lsWrite(
     all.map((item) =>
       item.customerId === customerId && item.status === "pending"
@@ -213,6 +230,7 @@ export function scheduleSecondReminder(firstItem: ReminderItem): ReminderItem | 
     clickedAt:   null,
     status:      "pending",
     sendCount:   2,
+    variant:     firstItem.variant,
   };
 
   lsWrite([...all, item]);
@@ -258,6 +276,7 @@ export function scheduleThirdReminder(secondItem: ReminderItem): ReminderItem | 
     clickedAt:   null,
     status:      "pending",
     sendCount:   3,
+    variant:     secondItem.variant,
   };
 
   lsWrite([...all, item]);
@@ -283,9 +302,9 @@ export function buildDueReminderMessages(
     if (count === 2) scheduleThirdReminder(item);
 
     const message =
-      count === 3 ? sendThirdReminderMessage(item.paymentUrl, item.intent) :
-      count === 2 ? sendSecondReminderMessage(item.paymentUrl, item.intent) :
-                    sendReminderMessage(item.paymentUrl, item.intent);
+      count === 3 ? sendThirdReminderMessage(item.paymentUrl, item.intent, item.variant) :
+      count === 2 ? sendSecondReminderMessage(item.paymentUrl, item.intent, item.variant) :
+                    sendReminderMessage(item.paymentUrl, item.intent, item.variant);
 
     return { item, message };
   });

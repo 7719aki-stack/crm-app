@@ -833,6 +833,7 @@ export default function CustomerDetailPage() {
                   pricePresets.length > 0 ? pricePresets : undefined,
                 )}
                 customerPhase={customerPhase}
+                customerId={customerId}
               />
               <OfferMessagePanel
                 message={generateOfferMessage(tags, pricePresets.length > 0 ? pricePresets : undefined)}

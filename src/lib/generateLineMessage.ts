@@ -262,15 +262,33 @@ export function generateLineMessage({
 
 /**
  * 決済URLを再送するリマインダーメッセージを生成する（1通目）。
- * intent によって文面を出し分ける。
+ * variant が指定された場合は A/B パターンを返す。
+ * variant 未指定時は intent によって文面を出し分ける。
  *
  * @param paymentUrl 決済URL
  * @param intent     "positive" | "hold"
+ * @param variant    "A"（シンプル）| "B"（訴求強め）| undefined（既存ロジック）
  */
 export function sendReminderMessage(
   paymentUrl: string,
   intent: "positive" | "hold",
+  variant?: "A" | "B",
 ): string {
+  if (variant === "A") {
+    return [
+      "今のうちに進めておくと楽です👇",
+      paymentUrl,
+    ].join("\n");
+  }
+
+  if (variant === "B") {
+    return [
+      "このタイミング逃すと結構きついです👇",
+      paymentUrl,
+      "後回しが一番損です",
+    ].join("\n");
+  }
+
   if (intent === "hold") {
     return [
       "少し迷っている状態かと思います。",
@@ -293,15 +311,34 @@ export function sendReminderMessage(
 
 /**
  * 2通目リマインダーメッセージを生成する。
- * 1通目未クリックの場合に送る追撃文。intent によって文面を出し分ける。
+ * 1通目未クリックの場合に送る追撃文。
+ * variant が指定された場合は A/B パターンを返す。
+ * variant 未指定時は intent によって文面を出し分ける。
  *
  * @param paymentUrl 決済URL
  * @param intent     "positive" | "hold"
+ * @param variant    "A"（シンプル）| "B"（訴求強め）| undefined（既存ロジック）
  */
 export function sendSecondReminderMessage(
   paymentUrl: string,
   intent: "positive" | "hold",
+  variant?: "A" | "B",
 ): string {
+  if (variant === "A") {
+    return [
+      "今のうちに進めておくと楽です👇",
+      paymentUrl,
+    ].join("\n");
+  }
+
+  if (variant === "B") {
+    return [
+      "このタイミング逃すと結構きついです👇",
+      paymentUrl,
+      "後回しが一番損です",
+    ].join("\n");
+  }
+
   if (intent === "hold") {
     return [
       "まだ迷いがある状態でも大丈夫です。",
@@ -328,15 +365,34 @@ export function sendSecondReminderMessage(
 
 /**
  * 3通目（最終）リマインダーメッセージを生成する。
- * 未クリックユーザーへの最後の1通。intent によって文面を出し分ける。
+ * 未クリックユーザーへの最後の1通。
+ * variant が指定された場合は A/B パターンを返す。
+ * variant 未指定時は intent によって文面を出し分ける。
  *
  * @param paymentUrl 決済URL
  * @param intent     "positive" | "hold"
+ * @param variant    "A"（シンプル）| "B"（訴求強め）| undefined（既存ロジック）
  */
 export function sendThirdReminderMessage(
   paymentUrl: string,
   intent: "positive" | "hold",
+  variant?: "A" | "B",
 ): string {
+  if (variant === "A") {
+    return [
+      "今のうちに進めておくと楽です👇",
+      paymentUrl,
+    ].join("\n");
+  }
+
+  if (variant === "B") {
+    return [
+      "このタイミング逃すと結構きついです👇",
+      paymentUrl,
+      "後回しが一番損です",
+    ].join("\n");
+  }
+
   if (intent === "hold") {
     return [
       "ここまで見ていただきありがとうございます。",

@@ -2,6 +2,7 @@
 
 import { type OfferProduct } from "@/lib/products";
 import type { CustomerPhase } from "@/lib/getRecommendedProducts";
+import { markReminderClicked } from "@/lib/reminder";
 
 const PHASE_CTA: Record<CustomerPhase, string> = {
   cold: "不安を整理して、今の状態を見てみる",
@@ -18,9 +19,10 @@ const FALLBACK_CTA = "この内容で送信";
 type Props = {
   products: OfferProduct[];
   customerPhase?: CustomerPhase;
+  customerId?: number;
 };
 
-export default function ProductSuggestionsPanel({ products, customerPhase }: Props) {
+export default function ProductSuggestionsPanel({ products, customerPhase, customerId }: Props) {
   if (products.length === 0) return null;
 
   return (
@@ -61,6 +63,7 @@ export default function ProductSuggestionsPanel({ products, customerPhase }: Pro
               href={p.paymentUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => { if (customerId != null) markReminderClicked(customerId); }}
               className={`inline-flex items-center gap-1 text-[11px] font-semibold px-3 py-1.5 rounded-md transition-colors whitespace-nowrap ${
                 p.type === "main"
                   ? "text-white bg-brand-600 hover:bg-brand-700"

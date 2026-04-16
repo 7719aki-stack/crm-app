@@ -332,7 +332,7 @@ describe("getDueReminders", () => {
 // ─── 6. buildDueReminderMessages ─────────────────────────────────────────────
 
 describe("buildDueReminderMessages", () => {
-  it("positive (cold): 期限到来かつ未クリックのアイテムに positive 文面を生成する", () => {
+  it("positive (cold): 期限到来かつ未クリックのアイテムにメッセージを生成する", () => {
     const url = "https://luna-gemnia.stores.jp/items/xyz";
     scheduleReminder(40, url, "positive", "cold");
 
@@ -343,10 +343,11 @@ describe("buildDueReminderMessages", () => {
     assert.equal(results.length,             1);
     assert.equal(results[0].item.customerId, 40);
     assert.ok(results[0].message.includes(url));
-    assert.ok(results[0].message.includes("念のためもう一度"));
+    // variant に応じた A/B 文言が含まれること（URL 含有で十分。文言は ABテスト variant で検証）
+    assert.ok(results[0].item.variant === "A" || results[0].item.variant === "B");
   });
 
-  it("hold (warm): 期限到来かつ未クリックのアイテムに hold 文面を生成する", () => {
+  it("hold (warm): 期限到来かつ未クリックのアイテムにメッセージを生成する", () => {
     const url = "https://luna-gemnia.stores.jp/items/hold";
     scheduleReminder(43, url, "hold", "warm");
 
@@ -357,7 +358,7 @@ describe("buildDueReminderMessages", () => {
     assert.equal(results.length,             1);
     assert.equal(results[0].item.customerId, 43);
     assert.ok(results[0].message.includes(url));
-    assert.ok(results[0].message.includes("迷っている"));
+    assert.ok(results[0].item.variant === "A" || results[0].item.variant === "B");
   });
 
   it("クリック済みはメッセージ生成対象外", () => {
@@ -555,8 +556,9 @@ describe("scheduleSecondReminder", () => {
         new Date(Date.now() + 13 * 60 * 60 * 1000 + 19 * 60 * 60 * 1000),
       );
       assert.equal(r2.length, 1);
-      assert.ok(r2[0].message.includes("まだ迷いがある状態でも大丈夫です"), "hold 2通目文面");
       assert.ok(r2[0].message.includes(url));
+      // variant に応じた A/B 文言が含まれること
+      assert.ok(r2[0].item.variant === "A" || r2[0].item.variant === "B", "hold 2通目: variant が引き継がれること");
     });
 
     it("2通目 due 処理時に positive の2通目文面が使われる", () => {
@@ -573,8 +575,9 @@ describe("scheduleSecondReminder", () => {
         new Date(Date.now() + 4 * 60 * 60 * 1000 + 13 * 60 * 60 * 1000),
       );
       assert.equal(r2.length, 1);
-      assert.ok(r2[0].message.includes("その後いかがでしょうか"), "positive 2通目文面");
       assert.ok(r2[0].message.includes(url));
+      // variant に応じた A/B 文言が含まれること
+      assert.ok(r2[0].item.variant === "A" || r2[0].item.variant === "B", "positive 2通目: variant が引き継がれること");
     });
 
     it("クリック済みなら2通目 due 処理で何も返さない", () => {
@@ -822,8 +825,9 @@ describe("scheduleThirdReminder", () => {
         new Date(Date.now() + 4 * 60 * 60 * 1000 + 13 * 60 * 60 * 1000 + 19 * 60 * 60 * 1000),
       );
       assert.equal(r3.length, 1);
-      assert.ok(r3[0].message.includes("これが最後のご案内になります"), "positive 3通目文面");
       assert.ok(r3[0].message.includes(url));
+      // variant に応じた A/B 文言が含まれること
+      assert.ok(r3[0].item.variant === "A" || r3[0].item.variant === "B", "positive 3通目: variant が引き継がれること");
     });
 
     it("3通目 due 処理時に hold の3通目文面が使われる", () => {
@@ -842,8 +846,9 @@ describe("scheduleThirdReminder", () => {
         new Date(Date.now() + 13 * 60 * 60 * 1000 + 19 * 60 * 60 * 1000 + 25 * 60 * 60 * 1000),
       );
       assert.equal(r3.length, 1);
-      assert.ok(r3[0].message.includes("ここまで見ていただきありがとうございます"), "hold 3通目文面");
       assert.ok(r3[0].message.includes(url));
+      // variant に応じた A/B 文言が含まれること
+      assert.ok(r3[0].item.variant === "A" || r3[0].item.variant === "B", "hold 3通目: variant が引き継がれること");
     });
 
     it("3通目処理後にさらに4通目は作成されない", () => {
@@ -884,5 +889,131 @@ describe("scheduleThirdReminder", () => {
       const r3 = getDueReminders(new Date(Date.now() + 200 * 60 * 60 * 1000));
       assert.equal(r3.length, 0, "3通目も作成されていない");
     });
+  });
+});
+
+// ─── 13. ABテスト（variant）────────────────────────────────────────────────────
+
+describe("ABテスト variant", () => {
+  // ── scheduleReminder ──────────────────────────────────────────────────────
+
+  it("scheduleReminder で variant が A または B になる", () => {
+    const item = scheduleReminder(300, "https://example.com/pay", "positive", "cold")!;
+    assert.ok(
+      item.variant === "A" || item.variant === "B",
+      `variant は "A" か "B" であること（実際: ${item.variant}）`,
+    );
+  });
+
+  it("scheduleReminder を複数回呼ぶと A と B の両方が生成される（確率テスト）", () => {
+    const variants = new Set<string>();
+    for (let i = 0; i < 50; i++) {
+      const it2 = scheduleReminder(400 + i, "https://example.com/pay", "positive", "cold");
+      if (it2) variants.add(it2.variant);
+    }
+    assert.ok(variants.has("A"), "A が生成されること");
+    assert.ok(variants.has("B"), "B が生成されること");
+  });
+
+  // ── scheduleSecondReminder — variant 伝播 ─────────────────────────────────
+
+  it("2通目は1通目の variant を引き継ぐ", () => {
+    const first  = scheduleReminder(301, "https://example.com/pay", "positive", "cold")!;
+    const second = scheduleSecondReminder(first)!;
+
+    assert.equal(second.variant, first.variant, "2通目が1通目の variant を引き継ぐ");
+  });
+
+  // ── scheduleThirdReminder — variant 伝播 ──────────────────────────────────
+
+  it("3通目は2通目（=1通目）の variant を引き継ぐ", () => {
+    const first  = scheduleReminder(302, "https://example.com/pay", "positive", "cold")!;
+    const second = scheduleSecondReminder(first)!;
+    const third  = scheduleThirdReminder(second)!;
+
+    assert.equal(third.variant, first.variant, "3通目が1通目の variant を引き継ぐ");
+  });
+
+  // ── sendReminderMessage A/B ───────────────────────────────────────────────
+
+  it("sendReminderMessage variant A: シンプル文面が返る", () => {
+    const url = "https://example.com/pay";
+    const msg = sendReminderMessage(url, "positive", "A");
+
+    assert.ok(msg.includes(url),                        "URL が含まれること");
+    assert.ok(msg.includes("今のうちに進めておくと楽です"), "A 文言が含まれること");
+    assert.ok(!msg.includes("後回しが一番損です"),        "B 文言は含まれないこと");
+  });
+
+  it("sendReminderMessage variant B: 訴求強め文面が返る", () => {
+    const url = "https://example.com/pay";
+    const msg = sendReminderMessage(url, "positive", "B");
+
+    assert.ok(msg.includes(url),                             "URL が含まれること");
+    assert.ok(msg.includes("このタイミング逃すと結構きついです"), "B 冒頭文言が含まれること");
+    assert.ok(msg.includes("後回しが一番損です"),              "B 末尾文言が含まれること");
+    assert.ok(!msg.includes("今のうちに進めておくと楽です"),   "A 文言は含まれないこと");
+  });
+
+  it("sendSecondReminderMessage variant A: シンプル文面が返る", () => {
+    const url = "https://example.com/pay";
+    const msg = sendSecondReminderMessage(url, "hold", "A");
+
+    assert.ok(msg.includes(url));
+    assert.ok(msg.includes("今のうちに進めておくと楽です"));
+  });
+
+  it("sendSecondReminderMessage variant B: 訴求強め文面が返る", () => {
+    const url = "https://example.com/pay";
+    const msg = sendSecondReminderMessage(url, "hold", "B");
+
+    assert.ok(msg.includes(url));
+    assert.ok(msg.includes("後回しが一番損です"));
+  });
+
+  it("sendThirdReminderMessage variant A: シンプル文面が返る", () => {
+    const url = "https://example.com/pay";
+    const msg = sendThirdReminderMessage(url, "positive", "A");
+
+    assert.ok(msg.includes(url));
+    assert.ok(msg.includes("今のうちに進めておくと楽です"));
+  });
+
+  it("sendThirdReminderMessage variant B: 訴求強め文面が返る", () => {
+    const url = "https://example.com/pay";
+    const msg = sendThirdReminderMessage(url, "positive", "B");
+
+    assert.ok(msg.includes(url));
+    assert.ok(msg.includes("後回しが一番損です"));
+  });
+
+  // ── buildDueReminderMessages — variant がメッセージに反映される ───────────
+
+  it("buildDueReminderMessages: variant A の item は A 文面を使う", () => {
+    // Math.random を固定して variant A を強制
+    const origRandom = Math.random;
+    Math.random = () => 0.1; // < 0.5 → A
+    const url = "https://example.com/pay";
+    scheduleReminder(303, url, "positive", "cold");
+    Math.random = origRandom;
+
+    const results = buildDueReminderMessages(new Date(Date.now() + 25 * 60 * 60 * 1000));
+    assert.equal(results.length, 1);
+    assert.equal(results[0].item.variant, "A");
+    assert.ok(results[0].message.includes("今のうちに進めておくと楽です"), "A 文面が使われること");
+  });
+
+  it("buildDueReminderMessages: variant B の item は B 文面を使う", () => {
+    // Math.random を固定して variant B を強制
+    const origRandom = Math.random;
+    Math.random = () => 0.9; // >= 0.5 → B
+    const url = "https://example.com/pay";
+    scheduleReminder(304, url, "positive", "cold");
+    Math.random = origRandom;
+
+    const results = buildDueReminderMessages(new Date(Date.now() + 25 * 60 * 60 * 1000));
+    assert.equal(results.length, 1);
+    assert.equal(results[0].item.variant, "B");
+    assert.ok(results[0].message.includes("後回しが一番損です"), "B 文面が使われること");
   });
 });

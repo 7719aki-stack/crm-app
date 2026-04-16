@@ -13,8 +13,8 @@ const PHASE_CTA: Record<CustomerPhase, string> = {
 };
 const PHASE_SUB_CTA: Record<CustomerPhase, string> = {
   cold: "このままだとどうなるか確認する",
-  warm: "今の流れが正しいか見極める",
-  hot:  "ここで動かないと何も変わらない",
+  warm: "今の流れが正しいか、このまま進んでいいのか見極める",
+  hot:  "ここで動かないと、今のままの状況が続く可能性があります",
 };
 const FALLBACK_CTA = "この内容で送信";
 

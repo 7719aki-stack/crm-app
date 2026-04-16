@@ -8,6 +8,11 @@ const PHASE_CTA: Record<CustomerPhase, string> = {
   warm: "このまま進んだ場合の結果を確認する",
   hot:  "この流れを変えにいく",
 };
+const PHASE_SUB_CTA: Record<CustomerPhase, string> = {
+  cold: "このままだとどうなるか確認する",
+  warm: "今の流れが正しいか見極める",
+  hot:  "ここで動かないと何も変わらない",
+};
 const FALLBACK_CTA = "この内容で送信";
 
 type Props = {
@@ -51,7 +56,7 @@ export default function ProductSuggestionsPanel({ products, customerPhase }: Pro
           )}
 
           {/* CTA */}
-          <div className="mt-2.5">
+          <div className="mt-2.5 space-y-1">
             <a
               href={p.paymentUrl}
               target="_blank"
@@ -77,6 +82,11 @@ export default function ProductSuggestionsPanel({ products, customerPhase }: Pro
                 />
               </svg>
             </a>
+            {customerPhase && (
+              <p className="text-xs text-gray-500">
+                {PHASE_SUB_CTA[customerPhase]}
+              </p>
+            )}
           </div>
         </div>
       ))}

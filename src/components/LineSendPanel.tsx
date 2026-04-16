@@ -11,6 +11,11 @@ const PHASE_CTA: Record<CustomerPhase, string> = {
   warm: "このまま進んだ場合の結果を確認する",
   hot:  "この流れを変えにいく",
 };
+const PHASE_SUB_CTA: Record<CustomerPhase, string> = {
+  cold: "このままだとどうなるか確認する",
+  warm: "今の流れが正しいか見極める",
+  hot:  "ここで動かないと何も変わらない",
+};
 const FALLBACK_CTA = "この内容で送信";
 
 const TONES = ["共感", "背中押し", "アップセル", "報告受け", "フォロー"] as const;
@@ -423,6 +428,11 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
           ? (customerPhase ? PHASE_CTA[customerPhase] : FALLBACK_CTA)
           : FALLBACK_CTA}
       </button>
+      {canSend && customerPhase && (
+        <p className="text-xs text-gray-500 text-center -mt-1">
+          {PHASE_SUB_CTA[customerPhase]}
+        </p>
+      )}
 
       {disabledReason ? (
         <p className="text-sm text-red-500 text-center">{disabledReason}</p>

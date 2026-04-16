@@ -146,12 +146,18 @@ export function markReminderClicked(customerId: number): void {
     (item) => item.customerId === customerId && item.status === "pending",
   );
   if (target) {
-    console.log({
+    const log = {
       customerId: target.customerId,
-      sendCount:  target.sendCount,
       variant:    target.variant,
+      sendCount:  target.sendCount,
       clickedAt,
-    });
+    };
+    // fire-and-forget: ログ失敗でもクリック記録は止めない
+    fetch("/api/log/reminder", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(log),
+    }).catch(() => {});
   }
 
   lsWrite(

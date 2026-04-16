@@ -257,6 +257,74 @@ export function generateLineMessage({
   return parts.join("\n");
 }
 
+// ── クロージングメッセージ生成 ────────────────────────────────────────────────
+// positive 返信に対して「確実に成約に繋げる」専用メッセージを生成する。
+// 構成: お礼 → 行動後押し → 限定性/緊急性 → CTA（URL）
+
+const CLOSING_BODY: Record<CustomerPhase, { push: string; urgency?: string }[]> = {
+  cold: [
+    {
+      push: "まずは全体像を整理することから始めていきましょう。",
+    },
+    {
+      push: "今の状況を整理することで、これからの動き方が見えてきます。",
+    },
+  ],
+  warm: [
+    {
+      push: "ここまで来ているので、判断の精度を上げることが大切です。",
+    },
+    {
+      push: "このまま進んだ場合の結果を確認しておくことで、後の選択がずっとラクになります。",
+    },
+  ],
+  hot: [
+    {
+      push:    "今が一番流れを変えやすいタイミングです。",
+      urgency: "※このタイミングを逃すと、同じ状態が続く可能性があります",
+    },
+    {
+      push:    "ここで動き出せたこと、きっと後から「あのとき動いてよかった」と思えます。",
+      urgency: "※今の流れが続く前に、一歩進んでおきましょう",
+    },
+  ],
+};
+
+export interface GenerateClosingMessageOptions {
+  phase:        CustomerPhase;
+  productName?: string;
+  paymentUrl?:  string;
+}
+
+/**
+ * positive 返信専用のクロージングメッセージを生成する。
+ * paymentUrl が渡された場合は URL をそのまま挿入し、ない場合はプレースホルダーを使う。
+ */
+export function generateClosingMessage({
+  phase,
+  productName,
+  paymentUrl,
+}: GenerateClosingMessageOptions): string {
+  const body    = pickRandom(CLOSING_BODY[phase]);
+  const urlLine = paymentUrl ?? "（※URLをここにご案内します）";
+  const ctaLabel = productName
+    ? `${productName}の詳細はこちらからご確認ください👇`
+    : "詳しい内容はこちらから確認できます👇";
+
+  const parts = [
+    "ありがとうございます。",
+    body.push,
+    "",
+    `${ctaLabel}\n${urlLine}`,
+  ];
+
+  if (body.urgency) {
+    parts.push("", body.urgency);
+  }
+
+  return parts.join("\n");
+}
+
 // ── フォローアップメッセージ生成 ──────────────────────────────────────────────
 // resolveReplyIntent の結果 × フェーズ × 商品名 から次の返信文を生成する。
 
@@ -297,26 +365,28 @@ export interface GenerateFollowupMessageOptions {
   intent:       ReplyIntent;
   phase:        CustomerPhase;
   productName?: string;
+  paymentUrl?:  string;
 }
 
 /**
  * 返信意図 × フェーズ × 商品名 から次の返信文を生成する。
- * positive / hold はフェーズ別の文言、unknown は再質問を促す共通文を返す。
+ * - positive → generateClosingMessage（クロージング専用文）
+ * - hold     → フェーズ別の再アプローチ文
+ * - unknown  → 選択肢を再提示する共通文
  */
 export function generateFollowupMessage({
   intent,
   phase,
   productName,
+  paymentUrl,
 }: GenerateFollowupMessageOptions): string {
+  if (intent === "positive") {
+    return generateClosingMessage({ phase, productName, paymentUrl });
+  }
+
   if (intent === "unknown") {
     return FOLLOWUP_UNKNOWN;
   }
 
-  const pool   = intent === "positive" ? FOLLOWUP_POSITIVE : FOLLOWUP_HOLD;
-  const base   = pickRandom(pool[phase]);
-  const suffix = productName && intent === "positive"
-    ? `\n\n${productName}について、詳しくご案内しますね。`
-    : "";
-
-  return base + suffix;
+  return pickRandom(FOLLOWUP_HOLD[phase]);
 }

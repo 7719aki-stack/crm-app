@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "npx tsx --test src/lib/__tests__/reminder.test.ts"
+    "test": "npx tsx --test src/lib/__tests__/reminder.test.ts",
+    "test:edu": "npx tsx --test src/lib/__tests__/educationScenario.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",

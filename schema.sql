@@ -47,3 +47,19 @@ CREATE TABLE IF NOT EXISTS appraisals (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   delivered_at TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS scenario_schedules (
+  id             SERIAL PRIMARY KEY,
+  customer_id    INTEGER NOT NULL REFERENCES customers(id),
+  scenario_type  TEXT NOT NULL DEFAULT 'education',
+  step_no        INTEGER NOT NULL,
+  scheduled_at   TIMESTAMPTZ NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'pending',
+  message_body   TEXT NOT NULL DEFAULT '',
+  sent_at        TIMESTAMPTZ,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_scenario_schedules_customer_id ON scenario_schedules(customer_id);
+CREATE INDEX IF NOT EXISTS idx_scenario_schedules_status_scheduled ON scenario_schedules(status, scheduled_at);

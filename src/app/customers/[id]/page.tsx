@@ -10,6 +10,7 @@ import { StatusPicker } from "@/components/StatusPicker";
 import { LineSendPanel } from "@/components/LineSendPanel";
 import { ReceivedMessagePanel } from "@/components/ReceivedMessagePanel";
 import { ScenarioQueuePanel } from "@/components/ScenarioQueuePanel";
+import { EducationScenarioPanel } from "@/components/EducationScenarioPanel";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import ReplyCandidatesPanel from "@/components/customer/ReplyCandidatesPanel";
 import ProductSuggestionsPanel from "@/components/customer/ProductSuggestionsPanel";
@@ -865,13 +866,20 @@ export default function CustomerDetailPage() {
             />
           </SectionCard>
 
-          {/* シナリオ予定 */}
+          {/* 教育シナリオ予定（DB管理） */}
           <SectionCard title="シナリオ予定">
-            <ScenarioQueuePanel
-              customerId={customer.id}
-              refreshKey={scenarioRefreshKey}
-            />
+            <EducationScenarioPanel customerId={customer.id} />
           </SectionCard>
+
+          {/* タグトリガーシナリオ予定（localStorage） */}
+          {scenarioRefreshKey >= 0 && (
+            <SectionCard title="タグシナリオ予定">
+              <ScenarioQueuePanel
+                customerId={customer.id}
+                refreshKey={scenarioRefreshKey}
+              />
+            </SectionCard>
+          )}
         </div>
       </div>
 

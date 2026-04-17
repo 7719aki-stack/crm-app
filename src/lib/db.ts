@@ -41,6 +41,19 @@ type AppraisalRow = {
   delivered_at: string | null;
 };
 
+type ScenarioScheduleRow = {
+  id:            number;
+  customer_id:   number;
+  scenario_type: string;
+  step_no:       number;
+  scheduled_at:  string;
+  status:        string;  // "pending" | "sent" | "cancelled"
+  message_body:  string;
+  sent_at:       string | null;
+  created_at:    string;
+  updated_at:    string;
+};
+
 type AbResultRow = {
   id:            number;
   winner:        string;  // "A" | "B"
@@ -88,6 +101,20 @@ export type Database = {
         Insert: Omit<AbResultRow, "id" | "decided_at">;
         Update: Partial<AbResultRow>;
         Relationships: [];
+      };
+      scenario_schedules: {
+        Row:    ScenarioScheduleRow;
+        Insert: Omit<ScenarioScheduleRow, "id" | "created_at" | "updated_at"> & Partial<Pick<ScenarioScheduleRow, "id" | "created_at" | "updated_at">>;
+        Update: Partial<ScenarioScheduleRow>;
+        Relationships: [
+          {
+            foreignKeyName: "scenario_schedules_customer_id_fkey";
+            columns: ["customer_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id"];
+          }
+        ];
       };
     };
     Views:          { [_ in never]?: never };

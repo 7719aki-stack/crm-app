@@ -375,6 +375,7 @@ export function CustomerList() {
                     { label: "温度感",       w: "w-24" },
                     { label: "最終接触",     w: "w-24" },
                     { label: "次回アクション", w: "w-32" },
+                    { label: "最終購入日",   w: "w-24" },
                     { label: "累計購入額",   w: "w-24" },
                   ].map((col) => (
                     <th
@@ -491,14 +492,30 @@ function CustomerTableRow({
         <ActionDateCell date={c.next_action} />
       </td>
 
+      {/* 最終購入日 */}
+      <td className="px-4 py-3.5">
+        {c.last_purchase_date ? (
+          <span className="text-xs text-emerald-600 font-medium">{c.last_purchase_date}</span>
+        ) : (
+          <span className="text-xs text-gray-300">—</span>
+        )}
+      </td>
+
       {/* 累計購入額 */}
       <td className="px-4 py-3.5 text-right pr-5">
         {c.total_amount === 0 ? (
           <span className="text-xs text-gray-300">—</span>
         ) : (
-          <span className={`text-xs font-semibold ${c.total_amount >= 50000 ? "text-brand-600" : "text-gray-700"}`}>
-            ¥{c.total_amount.toLocaleString()}
-          </span>
+          <div className="flex flex-col items-end gap-0.5">
+            <span className={`text-xs font-semibold ${c.total_amount >= 50000 ? "text-brand-600" : "text-gray-700"}`}>
+              ¥{c.total_amount.toLocaleString()}
+            </span>
+            {(c.purchase_count ?? 0) > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                購入済 {c.purchase_count}件
+              </span>
+            )}
+          </div>
         )}
       </td>
     </tr>

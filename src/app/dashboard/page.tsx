@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { supabase } from "@/lib/db";
+import { getSalesSummary } from "@/lib/getSalesSummary";
+import { detectABAnomaly } from "@/lib/abTest";
 import { getStatus } from "@/lib/statuses";
 import { getProduct } from "@/lib/products";
 import type { ProductId } from "@/lib/products";
@@ -57,8 +59,18 @@ export default async function DashboardPage() {
 
   // ── 初期値（DB失敗時のフォールバック）──────────────────
   let customers: CustomerRow[] = [];
-  let monthRevenue    = 0;
-  let monthPaidCount  = 0;
+  let monthRevenue      = 0;
+  let monthPaidCount    = 0;
+  let paidCustomerCount = 0;
+  let conversionRate    = 0;
+  let clickCount        = 0;
+  let abAnomalies: string[] = [];
+  let abResult: import("@/lib/getSalesSummary").ABResult = {
+    A: { variant: "A", clicks: 0, purchases: 0, cvr: 0 },
+    B: { variant: "B", clicks: 0, purchases: 0, cvr: 0 },
+    winner: null, winnerCVR: 0,
+    totalClicks: 0, totalPurchases: 0, overallCVR: 0,
+  };
   let recentSales: {
     id: number;
     customer_name: string;
@@ -69,7 +81,7 @@ export default async function DashboardPage() {
   }[] = [];
 
   try {
-    // 顧客一覧
+    // 顧客一覧（優先対応・ファネル分布用）
     const { data: rows, error: custError } = await supabase
       .from("customers")
       .select("id, name, display_name, category, status, tags, crisis_level, temperature, next_action, total_amount, updated_at")
@@ -91,35 +103,24 @@ export default async function DashboardPage() {
       total_amount: r.total_amount ?? 0,
     }));
 
-    // 今月売上（appraisals から集計）
-    const now = new Date();
-    const monthStart   = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
-
-    const { data: thisMonthAppraisals } = await supabase
-      .from("appraisals")
-      .select("price, paid")
-      .gte("created_at", monthStart)
-      .lt("created_at", nextMonthStart);
-
-    const paid = (thisMonthAppraisals ?? []).filter((a) => a.paid === 1);
-    monthRevenue   = paid.reduce((s, a) => s + (a.price ?? 0), 0);
-    monthPaidCount = paid.length;
+    // 売上KPI・購入人数・CVR・AB は getSalesSummary から一括取得
+    const summary = await getSalesSummary();
+    monthRevenue      = summary.monthlySales;
+    monthPaidCount    = summary.monthlyPaidCount;
+    paidCustomerCount = summary.paidCustomerCount;
+    conversionRate    = summary.conversionRate;
+    clickCount        = summary.clickCount;
+    abResult          = summary.abResult;
+    abAnomalies       = detectABAnomaly(summary.abResult);
 
     // 最近の購入（直近5件）
-    const { data: salesData } = await supabase
-      .from("appraisals")
-      .select("id, type, price, paid, created_at, customers(name)")
-      .order("created_at", { ascending: false })
-      .limit(5);
-
-    recentSales = (salesData ?? []).map((a) => ({
-      id:            a.id,
-      customer_name: (a.customers as { name: string } | null)?.name ?? "不明",
-      type:          a.type,
-      amount:        a.price ?? 0,
-      paid:          a.paid,
-      date:          String(a.created_at).slice(0, 10),
+    recentSales = summary.recentSales.slice(0, 5).map((s) => ({
+      id:            s.id,
+      customer_name: s.customer_name,
+      type:          s.type,
+      amount:        s.amount,
+      paid:          s.paid ? 1 : 0,
+      date:          s.date,
     }));
   } catch (e) {
     console.error("[DashboardPage] DB error:", e);
@@ -129,9 +130,8 @@ export default async function DashboardPage() {
   const leadCount       = customers.filter((c) => getStatus(c.status)?.group === "lead").length;
   const divinationCount = customers.filter((c) => getStatus(c.status)?.group === "divination").length;
   const preConvertCount = customers.filter((c) => c.status === "deep_guided").length;
-  const purchasedCount  = customers.filter(
-    (c) => c.status === "paid_purchased" || getStatus(c.status)?.group === "upsell"
-  ).length;
+  // 有料購入済人数: appraisals.paid=1 のユニーク顧客数（status 非依存）
+  // paidCustomerCount は getSalesSummary() で取得済み
 
   const priorityCustomers: CustomerRow[] = customers
     .filter((c) => {
@@ -203,8 +203,8 @@ export default async function DashboardPage() {
           },
           {
             label: "有料購入済",
-            sublabel: "購入〜アップセル",
-            value: purchasedCount,
+            sublabel: "appraisals.paid=1",
+            value: paidCustomerCount,
             unit: "名",
             iconCls: "bg-emerald-100 text-emerald-600",
             valCls: "text-emerald-700",
@@ -243,6 +243,138 @@ export default async function DashboardPage() {
             <p className="text-[11px] text-gray-400 mt-1.5">{card.sublabel}</p>
           </div>
         ))}
+      </div>
+
+      {/* ── CVR / ABテスト ──────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        {/* ヘッダー */}
+        <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-800">CVR / ABテスト</h3>
+            {abResult.winner ? (
+              <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Variant {abResult.winner} 自動採用中
+              </span>
+            ) : (
+              <span className="text-[10px] text-gray-400 border border-gray-200 px-2 py-0.5 rounded-full">
+                各 {10} クリックで自動判定
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] text-gray-400">
+            全 {clickCount} クリック / {abResult.totalPurchases} 購入
+          </span>
+        </div>
+
+        {/* 異常検知バナー */}
+        {abAnomalies.length > 0 && (
+          <div className="mx-5 mt-3 px-3 py-2 rounded-lg bg-red-50 border border-red-100">
+            <p className="text-xs font-semibold text-red-700 mb-1">⚠ データ異常を検出</p>
+            {abAnomalies.map((w, i) => (
+              <p key={i} className="text-[11px] text-red-600">{w}</p>
+            ))}
+          </div>
+        )}
+
+        <div className="px-5 py-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+            {/* 全体 CVR */}
+            <div className="flex flex-col justify-between bg-brand-50 rounded-xl border border-brand-100 px-4 py-3.5">
+              <p className="text-xs font-semibold text-brand-600 mb-2">全体 CVR</p>
+              <p className="text-3xl font-bold text-brand-700 leading-none">
+                {clickCount === 0 ? "—" : `${(conversionRate * 100).toFixed(1)}%`}
+              </p>
+              <p className="text-[11px] text-brand-400 mt-2">
+                {clickCount === 0
+                  ? "クリックデータ待ち"
+                  : `${clickCount} クリック → ${abResult.totalPurchases} 購入`}
+              </p>
+              {clickCount > 0 && (
+                <div className="mt-2 h-1.5 bg-brand-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-brand-500 transition-all"
+                    style={{ width: `${Math.min(conversionRate * 100, 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* AB 比較表 */}
+            {(["A", "B"] as const).map((v) => {
+              const s          = abResult[v];
+              const isWinner   = abResult.winner === v;
+              const hasData    = s.clicks > 0;
+              const needMore   = s.clicks < 10;
+              return (
+                <div
+                  key={v}
+                  className={`rounded-xl border px-4 py-3.5 ${
+                    isWinner
+                      ? "bg-emerald-50 border-emerald-200"
+                      : "bg-white border-gray-100"
+                  }`}
+                >
+                  {/* バリアント名 + 勝者バッジ */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`text-xs font-bold ${isWinner ? "text-emerald-700" : "text-gray-700"}`}>
+                      Variant {v}
+                    </span>
+                    {isWinner && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-600 text-white">
+                        ★ 勝者
+                      </span>
+                    )}
+                    {!abResult.winner && needMore && hasData && (
+                      <span className="text-[10px] text-gray-400">
+                        あと {10 - s.clicks} click
+                      </span>
+                    )}
+                  </div>
+
+                  {/* CVR 大字 */}
+                  <p className={`text-2xl font-bold leading-none ${isWinner ? "text-emerald-700" : "text-gray-700"}`}>
+                    {hasData ? `${(s.cvr * 100).toFixed(1)}%` : "—"}
+                  </p>
+
+                  {/* 内訳テーブル */}
+                  <div className="mt-2 space-y-0.5 text-[11px]">
+                    <div className="flex justify-between text-gray-500">
+                      <span>クリック</span>
+                      <span className="font-semibold text-gray-700">{s.clicks}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-500">
+                      <span>購入</span>
+                      <span className="font-semibold text-gray-700">{s.purchases}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-500">
+                      <span>CVR</span>
+                      <span className={`font-bold ${isWinner ? "text-emerald-600" : "text-gray-700"}`}>
+                        {hasData ? `${(s.cvr * 100).toFixed(1)}%` : "—"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 棒グラフ */}
+                  {hasData && (
+                    <div className="mt-2 h-1 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${isWinner ? "bg-emerald-500" : "bg-gray-400"}`}
+                        style={{ width: `${Math.min(s.cvr * 100, 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {abResult.totalClicks === 0 && (
+            <p className="text-[11px] text-gray-400 mt-3 text-center">
+              リマインダー送信 → URL クリック → 購入 の流れが発生するとデータが蓄積されます
+            </p>
+          )}
+        </div>
       </div>
 
       {/* ── 優先対応顧客 ────────────────────────────────── */}

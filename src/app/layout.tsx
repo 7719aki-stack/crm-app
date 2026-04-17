@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { ABWinnerInit } from "@/components/ABWinnerInit";
 
 export const metadata: Metadata = {
   title: "Luna CRM",
@@ -12,6 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja">
       <body>
+        <ABWinnerInit />
         <div className="flex h-screen bg-slate-50 overflow-hidden">
           {/* サイドバー */}
           <Sidebar />

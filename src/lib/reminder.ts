@@ -25,7 +25,9 @@ export interface ReminderItem {
 
 // ── 定数 ──────────────────────────────────────────────────────────────────────
 
-const LS_KEY = "crm_reminder_queue_v1";
+const LS_KEY        = "crm_reminder_queue_v1";
+const AB_CACHE_KEY  = "crm_ab_winner_cache_v2"; // APIから取得した勝者をキャッシュ
+const AB_CACHE_TTL  = 5 * 60 * 1000;            // 5分でキャッシュ失効 → 再フェッチ
 
 // ── phase 別遅延解決 ──────────────────────────────────────────────────────────
 
@@ -73,6 +75,62 @@ export function resolveThirdReminderDelayHours(phase: string): number {
 
 // ── localStorage ヘルパー ─────────────────────────────────────────────────────
 
+// ── ABテスト勝者ヘルパー（API フェッチ＋短期キャッシュ）──────────────────────
+
+interface ABWinnerCache {
+  winner:    "A" | "B" | null;
+  fetchedAt: number; // Date.now()
+}
+
+function readABCache(): ABWinnerCache | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(AB_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as ABWinnerCache;
+  } catch { return null; }
+}
+
+function writeABCache(winner: "A" | "B" | null): void {
+  if (typeof window === "undefined") return;
+  const cache: ABWinnerCache = { winner, fetchedAt: Date.now() };
+  try { localStorage.setItem(AB_CACHE_KEY, JSON.stringify(cache)); } catch {}
+}
+
+/**
+ * /api/ab-winner を呼んで勝者を取得し、短期キャッシュに保存する。
+ * キャッシュ有効期限（5分）内はフェッチをスキップ。
+ * Promise を返すので呼び出し元で await するか fire-and-forget にする。
+ */
+export async function refreshABWinner(): Promise<"A" | "B" | null> {
+  // キャッシュが新鮮ならそのまま使う
+  const cache = readABCache();
+  if (cache && Date.now() - cache.fetchedAt < AB_CACHE_TTL) {
+    return cache.winner;
+  }
+  try {
+    const res = await fetch("/api/ab-winner");
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const json = await res.json() as { winner: "A" | "B" | null };
+    const winner = json.winner ?? null;
+    writeABCache(winner);
+    return winner;
+  } catch (e) {
+    console.warn("[reminder] refreshABWinner fetch failed:", e);
+    return cache?.winner ?? null; // 失敗時は古いキャッシュを返す
+  }
+}
+
+/**
+ * キャッシュから勝者を同期的に読む（フォールバック付き）。
+ * refreshABWinner() が未実行の場合は "B"（デフォルト）。
+ */
+function loadWinner(): "A" | "B" {
+  const cache = readABCache();
+  if (cache?.winner === "A" || cache?.winner === "B") return cache.winner;
+  return "B"; // デフォルト（強訴求版）
+}
+
 function lsRead(): ReminderItem[] {
   if (typeof window === "undefined") return [];
   try {
@@ -113,7 +171,7 @@ export function scheduleReminder(
 
   const now      = new Date();
   const delayMs  = resolveReminderDelayHours(phase) * 60 * 60 * 1000;
-  const variant  = "B"; // ABテスト結果: B（強訴求）に固定
+  const variant  = loadWinner(); // ABテスト勝者を自動採用（データ不足時は "B"）
   const item: ReminderItem = {
     id:          `reminder_${Date.now()}_${customerId}`,
     customerId,

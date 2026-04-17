@@ -30,13 +30,26 @@ type MessageRow = {
 };
 
 type AppraisalRow = {
-  id:          number;
-  customer_id: number;
-  type:        string;
-  price:       number | null;
-  paid:        number;
-  notes:       string | null;
-  created_at:  string;
+  id:           number;
+  customer_id:  number;
+  type:         string;
+  status:       string;
+  price:        number;
+  paid:         number;
+  notes:        string | null;
+  created_at:   string;
+  delivered_at: string | null;
+};
+
+type AbResultRow = {
+  id:            number;
+  winner:        string;  // "A" | "B"
+  decided_at:    string;
+  click_count_a: number;
+  click_count_b: number;
+  cvr_a:         number;
+  cvr_b:         number;
+  is_current:    boolean;
 };
 
 export type Database = {
@@ -67,6 +80,12 @@ export type Database = {
             referencedColumns: ["id"];
           }
         ];
+      };
+      ab_results: {
+        Row:    AbResultRow;
+        Insert: Omit<AbResultRow, "id" | "decided_at">;
+        Update: Partial<AbResultRow>;
+        Relationships: [];
       };
     };
     Views:          { [_ in never]?: never };

@@ -12,18 +12,20 @@ export type Temperature    = "cold" | "cool" | "warm" | "hot";
 export type CrisisLevel    = 1 | 2 | 3 | 4 | 5;
 
 export interface CustomerRow {
-  id:            number;
-  name:          string;
-  display_name:  string;
-  category:      Category;
-  status:        CustomerStatus;
-  tags:          string[];
-  crisis_level:  CrisisLevel;
-  temperature:   Temperature;
-  last_contact:  string;        // YYYY-MM-DD
-  next_action:   string | null; // YYYY-MM-DD
-  total_amount:  number;        // 円
-  created_at?:   string;        // YYYY-MM-DD
+  id:                  number;
+  name:                string;
+  display_name:        string;
+  category:            Category;
+  status:              CustomerStatus;
+  tags:                string[];
+  crisis_level:        CrisisLevel;
+  temperature:         Temperature;
+  last_contact:        string;           // YYYY-MM-DD
+  next_action:         string | null;    // YYYY-MM-DD
+  total_amount:        number;           // 円（paid=1 の appraisals 合算）
+  created_at?:         string;           // YYYY-MM-DD
+  last_purchase_date?: string | null;    // YYYY-MM-DD（最新支払済み購入日）
+  purchase_count?:     number;           // 支払済み購入件数
 }
 
 // ─── 詳細画面用の拡張型 ───────────────────────────────

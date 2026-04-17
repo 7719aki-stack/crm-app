@@ -36,6 +36,22 @@ export async function GET(_req: NextRequest, { params }: Params) {
       ? String(lastMsg.created_at).slice(0, 10)
       : String(row.updated_at).slice(0, 10);
 
+    // 購入履歴を appraisals テーブルから取得
+    const { data: appraisalRows } = await supabase
+      .from("appraisals")
+      .select("id, type, price, paid, notes, created_at")
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: false });
+
+    const purchases = (appraisalRows ?? []).map((a) => ({
+      id:         a.id,
+      date:       String(a.created_at).slice(0, 10),
+      product_id: a.type as import("@/lib/products").ProductId,
+      note:       (a.notes as string | null) ?? undefined,
+      price:      a.price ?? 0,
+      paid:       a.paid === 1,
+    }));
+
     const customer: CustomerDetail = {
       id:           row.id,
       name:         row.name,
@@ -52,7 +68,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       notes:        row.notes         ?? undefined,
       line_user_id: row.line_user_id  ?? undefined,
       funnel_stage: 1,
-      purchases:    [],
+      purchases,
       actions:      [],
       consultation: undefined,
       partner:      undefined,

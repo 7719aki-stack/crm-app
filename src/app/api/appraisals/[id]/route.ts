@@ -54,8 +54,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // paid が 0→1 に変化した場合は AB purchase ログを記録
     if (paidChanged && body.paid === 1 && current.paid !== 1) {
+      // 最新の price を取得してログに記録
+      const { data: updated } = await supabase
+        .from("appraisals")
+        .select("price")
+        .eq("id", appraisalId)
+        .single();
+      const price   = Number(updated?.price ?? body.price ?? 0);
       const variant = getLastClickVariant(current.customer_id);
-      if (variant) logPurchaseEvent(current.customer_id, variant);
+      if (variant) logPurchaseEvent(current.customer_id, variant, price);
     }
 
     return NextResponse.json({ ok: true });

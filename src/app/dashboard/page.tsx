@@ -64,12 +64,14 @@ export default async function DashboardPage() {
   let paidCustomerCount = 0;
   let conversionRate    = 0;
   let clickCount        = 0;
+  let avgOrderValue     = 0;
+  let ltv               = 0;
   let abAnomalies: string[] = [];
   let abResult: import("@/lib/getSalesSummary").ABResult = {
-    A: { variant: "A", clicks: 0, purchases: 0, cvr: 0 },
-    B: { variant: "B", clicks: 0, purchases: 0, cvr: 0 },
-    winner: null, winnerCVR: 0,
-    totalClicks: 0, totalPurchases: 0, overallCVR: 0,
+    A: { variant: "A", clicks: 0, purchases: 0, totalAmount: 0, cvr: 0, revenuePerClick: 0 },
+    B: { variant: "B", clicks: 0, purchases: 0, totalAmount: 0, cvr: 0, revenuePerClick: 0 },
+    winner: null, winnerCVR: 0, winnerRPC: 0,
+    totalClicks: 0, totalPurchases: 0, totalRevenue: 0, overallCVR: 0,
   };
   let recentSales: {
     id: number;
@@ -110,6 +112,8 @@ export default async function DashboardPage() {
     paidCustomerCount = summary.paidCustomerCount;
     conversionRate    = summary.conversionRate;
     clickCount        = summary.clickCount;
+    avgOrderValue     = summary.avgOrderValue;
+    ltv               = summary.ltv;
     abResult          = summary.abResult;
     abAnomalies       = detectABAnomaly(summary.abResult);
 
@@ -245,12 +249,77 @@ export default async function DashboardPage() {
         ))}
       </div>
 
+      {/* ── 収益分析 KPI ────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          {
+            label:    "平均購入単価",
+            sublabel: "全期間 paid=1 平均",
+            valueStr: avgOrderValue > 0 ? `¥${Math.round(avgOrderValue).toLocaleString()}` : "—",
+            iconCls:  "bg-violet-100 text-violet-600",
+            valCls:   "text-violet-700",
+            icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+              </svg>
+            ),
+          },
+          {
+            label:    "LTV",
+            sublabel: "顧客あたり累計売上",
+            valueStr: ltv > 0 ? `¥${Math.round(ltv).toLocaleString()}` : "—",
+            iconCls:  "bg-rose-100 text-rose-600",
+            valCls:   "text-rose-700",
+            icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+            ),
+          },
+          {
+            label:    "Variant A RPC",
+            sublabel: "revenue per click",
+            valueStr: abResult.A.clicks > 0 ? `¥${Math.round(abResult.A.revenuePerClick).toLocaleString()}` : "—",
+            iconCls:  abResult.winner === "A" ? "bg-emerald-100 text-emerald-600" : "bg-gray-100 text-gray-500",
+            valCls:   abResult.winner === "A" ? "text-emerald-700" : "text-gray-600",
+            icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            ),
+          },
+          {
+            label:    "Variant B RPC",
+            sublabel: "revenue per click",
+            valueStr: abResult.B.clicks > 0 ? `¥${Math.round(abResult.B.revenuePerClick).toLocaleString()}` : "—",
+            iconCls:  abResult.winner === "B" ? "bg-emerald-100 text-emerald-600" : "bg-gray-100 text-gray-500",
+            valCls:   abResult.winner === "B" ? "text-emerald-700" : "text-gray-600",
+            icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            ),
+          },
+        ].map((card) => (
+          <div key={card.label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-gray-500">{card.label}</p>
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${card.iconCls}`}>
+                {card.icon}
+              </div>
+            </div>
+            <p className={`text-2xl font-bold leading-none ${card.valCls}`}>{card.valueStr}</p>
+            <p className="text-[11px] text-gray-400 mt-1.5">{card.sublabel}</p>
+          </div>
+        ))}
+      </div>
+
       {/* ── CVR / ABテスト ──────────────────────────────── */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         {/* ヘッダー */}
         <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-gray-800">CVR / ABテスト</h3>
+            <h3 className="text-sm font-semibold text-gray-800">ABテスト（Revenue Per Click 判定）</h3>
             {abResult.winner ? (
               <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                 Variant {abResult.winner} 自動採用中
@@ -332,10 +401,11 @@ export default async function DashboardPage() {
                     )}
                   </div>
 
-                  {/* CVR 大字 */}
+                  {/* RPC 大字（勝者判定指標） */}
                   <p className={`text-2xl font-bold leading-none ${isWinner ? "text-emerald-700" : "text-gray-700"}`}>
-                    {hasData ? `${(s.cvr * 100).toFixed(1)}%` : "—"}
+                    {hasData && s.revenuePerClick > 0 ? `¥${Math.round(s.revenuePerClick).toLocaleString()}` : "—"}
                   </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">/ click</p>
 
                   {/* 内訳テーブル */}
                   <div className="mt-2 space-y-0.5 text-[11px]">
@@ -348,8 +418,20 @@ export default async function DashboardPage() {
                       <span className="font-semibold text-gray-700">{s.purchases}</span>
                     </div>
                     <div className="flex justify-between text-gray-500">
-                      <span>CVR</span>
+                      <span>売上合計</span>
+                      <span className="font-semibold text-gray-700">
+                        {s.totalAmount > 0 ? `¥${s.totalAmount.toLocaleString()}` : "—"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-gray-500">
+                      <span>RPC</span>
                       <span className={`font-bold ${isWinner ? "text-emerald-600" : "text-gray-700"}`}>
+                        {hasData && s.revenuePerClick > 0 ? `¥${Math.round(s.revenuePerClick).toLocaleString()}` : "—"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-gray-500">
+                      <span>CVR</span>
+                      <span className="font-medium text-gray-600">
                         {hasData ? `${(s.cvr * 100).toFixed(1)}%` : "—"}
                       </span>
                     </div>

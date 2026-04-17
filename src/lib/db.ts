@@ -47,9 +47,11 @@ type AbResultRow = {
   decided_at:    string;
   click_count_a: number;
   click_count_b: number;
-  cvr_a:         number;
-  cvr_b:         number;
-  is_current:    boolean;
+  cvr_a:               number;
+  cvr_b:               number;
+  revenue_per_click_a: number;
+  revenue_per_click_b: number;
+  is_current:          boolean;
 };
 
 export type Database = {

@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     if (paid === 1) {
       await syncCustomerTotalAmount(customer_id);
       const variant = getLastClickVariant(customer_id);
-      if (variant) logPurchaseEvent(customer_id, variant);
+      if (variant) logPurchaseEvent(customer_id, variant, Number(price));
     }
 
     return NextResponse.json(row, { status: 201 });

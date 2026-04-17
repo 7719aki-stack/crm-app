@@ -1,5 +1,5 @@
 // ─── ABテスト分析エンジン（サーバー専用）────────────────────
-// logs/reminder.log を解析して variant ごとの CVR を算出し、
+// logs/reminder.log を解析して variant ごとの revenue_per_click を算出し、
 // 勝者バリアントを決定する。勝者は Supabase の ab_results テーブルに永続化。
 //
 // ⚠️ このモジュールは Node.js の fs を使うため、
@@ -14,11 +14,12 @@ import { supabase } from "./db";
 export type Variant = "A" | "B";
 
 export interface VariantStats {
-  variant:   Variant;
-  clicks:    number;
-  purchases: number;
-  /** 0–1 の小数。clicks=0 なら 0 */
-  cvr:       number;
+  variant:         Variant;
+  clicks:          number;
+  purchases:       number;
+  totalAmount:     number;   // 売上合計（円）
+  cvr:             number;   // 0–1 の小数
+  revenuePerClick: number;   // 売上 / クリック数（収益最大化指標）
 }
 
 export interface ABResult {
@@ -27,9 +28,10 @@ export interface ABResult {
   /** null = データ不足で判定不可（片方が MIN_CLICKS 未満） */
   winner:          Variant | null;
   winnerCVR:       number;
+  winnerRPC:       number;   // 勝者の revenue_per_click
   totalClicks:     number;
   totalPurchases:  number;
-  /** 全体 CVR（clicks=0 なら 0） */
+  totalRevenue:    number;   // 全売上合計（円）
   overallCVR:      number;
 }
 
@@ -47,12 +49,18 @@ interface LogEntry {
   sendCount?:   number;
   clickedAt?:   string;      // 旧フォーマット互換
   purchasedAt?: string;
+  price?:       number;      // 購入金額（purchase イベントのみ）
 }
 
-function parseLog(): { clicks: Record<Variant, number>; purchases: Record<Variant, number> } {
+function parseLog(): {
+  clicks:    Record<Variant, number>;
+  purchases: Record<Variant, number>;
+  revenue:   Record<Variant, number>;
+} {
   const result = {
     clicks:    { A: 0, B: 0 } as Record<Variant, number>,
     purchases: { A: 0, B: 0 } as Record<Variant, number>,
+    revenue:   { A: 0, B: 0 } as Record<Variant, number>,
   };
 
   if (!fs.existsSync(LOG_PATH)) return result;
@@ -70,6 +78,7 @@ function parseLog(): { clicks: Record<Variant, number>; purchases: Record<Varian
         result.clicks[v]++;
       } else if (ev === "purchase") {
         result.purchases[v]++;
+        result.revenue[v] += typeof entry.price === "number" ? entry.price : 0;
       }
     } catch {
       // 壊れた行は無視
@@ -82,16 +91,18 @@ function parseLog(): { clicks: Record<Variant, number>; purchases: Record<Varian
 
 /**
  * ログファイルを解析して ABResult を返す。キャッシュなし（常に再計算）。
- * ログが存在しない場合はゼロ値を返す。
+ * 勝者判定は revenue_per_click（収益最大化）ベース。
  */
 export function getABResult(): ABResult {
-  const { clicks, purchases } = parseLog();
+  const { clicks, purchases, revenue } = parseLog();
 
   const makeStats = (v: Variant): VariantStats => ({
-    variant:   v,
-    clicks:    clicks[v],
-    purchases: purchases[v],
-    cvr:       clicks[v] > 0 ? purchases[v] / clicks[v] : 0,
+    variant:         v,
+    clicks:          clicks[v],
+    purchases:       purchases[v],
+    totalAmount:     revenue[v],
+    cvr:             clicks[v] > 0 ? purchases[v] / clicks[v] : 0,
+    revenuePerClick: clicks[v] > 0 ? revenue[v] / clicks[v] : 0,
   });
 
   const A = makeStats("A");
@@ -103,20 +114,25 @@ export function getABResult(): ABResult {
 
   let winner: Variant | null = null;
   if (enoughData) {
-    if (A.cvr > B.cvr) winner = "A";
-    else if (B.cvr > A.cvr) winner = "B";
+    // revenue_per_click ベースで勝者決定（CVR より売上を優先）
+    if (A.revenuePerClick > B.revenuePerClick)      winner = "A";
+    else if (B.revenuePerClick > A.revenuePerClick) winner = "B";
     // 同率の場合は null のまま（判定保留）
   }
 
   const totalClicks    = A.clicks + B.clicks;
   const totalPurchases = A.purchases + B.purchases;
+  const totalRevenue   = A.totalAmount + B.totalAmount;
+  const winnerStats    = winner ? (winner === "A" ? A : B) : null;
 
   return {
     A, B,
     winner,
-    winnerCVR:    winner ? (winner === "A" ? A.cvr : B.cvr) : 0,
+    winnerCVR:  winnerStats?.cvr ?? 0,
+    winnerRPC:  winnerStats?.revenuePerClick ?? 0,
     totalClicks,
     totalPurchases,
+    totalRevenue,
     overallCVR: totalClicks > 0 ? totalPurchases / totalClicks : 0,
   };
 }
@@ -139,44 +155,44 @@ export function detectABAnomaly(result: ABResult): string[] {
 
 /**
  * 現在の勝者を Supabase の ab_results テーブルに保存する。
- * 保存前に既存の is_current=true を全て false にリセット。
  */
 export async function saveABResultToDB(result: ABResult): Promise<void> {
-  if (!result.winner) return; // 勝者未確定なら保存しない
+  if (!result.winner) return;
 
-  // 既存の is_current を全て false に
   await supabase
     .from("ab_results")
     .update({ is_current: false } as never)
     .eq("is_current", true);
 
-  // 新しい勝者を INSERT
   await supabase.from("ab_results").insert({
-    winner:        result.winner,
-    decided_at:    new Date().toISOString(),
-    click_count_a: result.A.clicks,
-    click_count_b: result.B.clicks,
-    cvr_a:         result.A.cvr,
-    cvr_b:         result.B.cvr,
-    is_current:    true,
+    winner:              result.winner,
+    decided_at:          new Date().toISOString(),
+    click_count_a:       result.A.clicks,
+    click_count_b:       result.B.clicks,
+    cvr_a:               result.A.cvr,
+    cvr_b:               result.B.cvr,
+    revenue_per_click_a: result.A.revenuePerClick,
+    revenue_per_click_b: result.B.revenuePerClick,
+    is_current:          true,
   } as never);
 }
 
 /**
  * DB から最新の勝者レコードを取得する。
- * 存在しない場合は null を返す。
  */
 export async function loadABResultFromDB(): Promise<{
-  winner: Variant;
-  click_count_a: number;
-  click_count_b: number;
-  cvr_a: number;
-  cvr_b: number;
-  decided_at: string;
+  winner:              Variant;
+  click_count_a:       number;
+  click_count_b:       number;
+  cvr_a:               number;
+  cvr_b:               number;
+  revenue_per_click_a: number;
+  revenue_per_click_b: number;
+  decided_at:          string;
 } | null> {
   const { data } = await supabase
     .from("ab_results")
-    .select("winner, click_count_a, click_count_b, cvr_a, cvr_b, decided_at")
+    .select("winner, click_count_a, click_count_b, cvr_a, cvr_b, revenue_per_click_a, revenue_per_click_b, decided_at")
     .eq("is_current", true)
     .order("decided_at", { ascending: false })
     .limit(1)
@@ -185,19 +201,25 @@ export async function loadABResultFromDB(): Promise<{
   if (!data) return null;
   const w = data.winner as Variant;
   if (w !== "A" && w !== "B") return null;
-  return { ...data, winner: w };
+  const d = data as Record<string, unknown>;
+  return {
+    ...data,
+    winner:              w,
+    revenue_per_click_a: typeof d.revenue_per_click_a === "number" ? d.revenue_per_click_a : 0,
+    revenue_per_click_b: typeof d.revenue_per_click_b === "number" ? d.revenue_per_click_b : 0,
+  };
 }
 
 /**
- * ログに purchase イベントを追記する。
- * 直前のクリックから variant を取得する。
- * → appraisals paid=1 確定時に API Route から呼ぶ。
+ * ログに purchase イベントを追記する（price 付き）。
+ * appraisals paid=1 確定時に API Route から呼ぶ。
  */
-export function logPurchaseEvent(customerId: number, variant: Variant): void {
+export function logPurchaseEvent(customerId: number, variant: Variant, price: number): void {
   const entry = {
     event:       "purchase",
     customerId,
     variant,
+    price,
     purchasedAt: new Date().toISOString(),
   };
   try {
@@ -210,13 +232,11 @@ export function logPurchaseEvent(customerId: number, variant: Variant): void {
 
 /**
  * 指定 customerId の最後のクリックイベントから variant を返す。
- * 見つからない場合は null。
  */
 export function getLastClickVariant(customerId: number): Variant | null {
   if (!fs.existsSync(LOG_PATH)) return null;
 
   const lines = fs.readFileSync(LOG_PATH, "utf-8").split("\n").filter(Boolean);
-  // 降順で探す（最後のクリックを取得）
   for (let i = lines.length - 1; i >= 0; i--) {
     try {
       const entry = JSON.parse(lines[i]) as LogEntry;

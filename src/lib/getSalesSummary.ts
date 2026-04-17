@@ -60,6 +60,11 @@ export interface SalesSummary {
   conversionRate:     number;
   /** ABテスト結果 */
   abResult:           ABResult;
+  // ── LTV 指標 ────────────────────────────────────────
+  /** 平均購入単価 = totalSales / totalPaidCount（0件なら 0） */
+  avgOrderValue:      number;
+  /** LTV = totalSales / paidCustomerCount（0人なら 0） */
+  ltv:                number;
 }
 
 // ABResult を再エクスポート（ダッシュボード等から型を使えるように）
@@ -162,8 +167,11 @@ export async function getSalesSummary(): Promise<SalesSummary> {
   // ── CVR / ABテスト ────────────────────────────────────
   const abResult      = getABResult();
   const clickCount    = abResult.totalClicks;
-  // CVR: 全期間の支払済件数 ÷ クリック数（クリック=0なら 0）
   const conversionRate = clickCount > 0 ? totalPaidCount / clickCount : 0;
+
+  // ── LTV 指標 ─────────────────────────────────────────
+  const avgOrderValue = totalPaidCount > 0 ? totalSales / totalPaidCount : 0;
+  const ltv           = paidCustomerCount > 0 ? totalSales / paidCustomerCount : 0;
 
   return {
     monthlySales,
@@ -178,6 +186,8 @@ export async function getSalesSummary(): Promise<SalesSummary> {
     clickCount,
     conversionRate,
     abResult,
+    avgOrderValue,
+    ltv,
   };
 }
 

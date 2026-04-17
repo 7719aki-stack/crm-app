@@ -44,17 +44,20 @@ export async function GET() {
         B:              live.B,
         totalClicks:    live.totalClicks,
         totalPurchases: live.totalPurchases,
+        totalRevenue:   live.totalRevenue,
         overallCVR:     live.overallCVR,
       },
       // DB 永続化済み
       stored: stored
         ? {
-            winner:       stored.winner,
-            decided_at:   stored.decided_at,
-            click_count_a: stored.click_count_a,
-            click_count_b: stored.click_count_b,
-            cvr_a:         stored.cvr_a,
-            cvr_b:         stored.cvr_b,
+            winner:              stored.winner,
+            decided_at:          stored.decided_at,
+            click_count_a:        stored.click_count_a,
+            click_count_b:        stored.click_count_b,
+            cvr_a:                stored.cvr_a,
+            cvr_b:                stored.cvr_b,
+            revenue_per_click_a:  stored.revenue_per_click_a,
+            revenue_per_click_b:  stored.revenue_per_click_b,
           }
         : null,
       // クライアントが使うべき勝者（ライブ優先 → DB フォールバック）

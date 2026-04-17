@@ -60,11 +60,17 @@ export interface SalesSummary {
   conversionRate:     number;
   /** ABテスト結果 */
   abResult:           ABResult;
-  // ── LTV 指標 ────────────────────────────────────────
+  // ── LTV / アップセル指標 ─────────────────────────────
   /** 平均購入単価 = totalSales / totalPaidCount（0件なら 0） */
   avgOrderValue:      number;
-  /** LTV = totalSales / paidCustomerCount（0人なら 0） */
+  /** LTV = (totalSales + upsellRevenue) / paidCustomerCount（0人なら 0） */
   ltv:                number;
+  /** アップセル成約数（ログ集計） */
+  upsellCount:        number;
+  /** アップセル売上合計（ログ集計） */
+  upsellRevenue:      number;
+  /** アップセル率 = upsellCount / totalPaidCount */
+  upsellRate:         number;
 }
 
 // ABResult を再エクスポート（ダッシュボード等から型を使えるように）
@@ -169,9 +175,12 @@ export async function getSalesSummary(): Promise<SalesSummary> {
   const clickCount    = abResult.totalClicks;
   const conversionRate = clickCount > 0 ? totalPaidCount / clickCount : 0;
 
-  // ── LTV 指標 ─────────────────────────────────────────
+  // ── LTV / アップセル指標 ──────────────────────────────
+  const upsellCount   = abResult.totalUpsells;
+  const upsellRevenue = abResult.totalUpsellRevenue;
+  const upsellRate    = totalPaidCount > 0 ? upsellCount / totalPaidCount : 0;
   const avgOrderValue = totalPaidCount > 0 ? totalSales / totalPaidCount : 0;
-  const ltv           = paidCustomerCount > 0 ? totalSales / paidCustomerCount : 0;
+  const ltv           = paidCustomerCount > 0 ? (totalSales + upsellRevenue) / paidCustomerCount : 0;
 
   return {
     monthlySales,
@@ -188,6 +197,9 @@ export async function getSalesSummary(): Promise<SalesSummary> {
     abResult,
     avgOrderValue,
     ltv,
+    upsellCount,
+    upsellRevenue,
+    upsellRate,
   };
 }
 

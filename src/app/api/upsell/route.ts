@@ -4,13 +4,12 @@
 //
 // body: { customer_id, type: "upsell" | "reminder", upsell_price? }
 //
-// type="upsell"   → 購入済み顧客にアップセルオファーを送信
-// type="reminder" → 未購入顧客にリマインドを送信
-//
-// LINE は /api/line/push を内部呼び出しで利用する。
+// type="upsell"   → 購入済み顧客にアップセルオファーを送信（ログ: upsell accepted=true）
+// type="reminder" → 未購入顧客にクリック後リマインドを送信
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
+import { getLastClickVariant, logUpsellEvent } from "@/lib/abTest";
 
 const UPSELL_DEFAULT_PRICE = 10_000;
 
@@ -38,11 +37,12 @@ function buildUpsellMessage(name: string, price: number): string {
 function buildReminderMessage(name: string): string {
   return `${name} 様、こんにちは。
 
-先日ご関心をお持ちいただいた鑑定についてご連絡しました。
+先ほど鑑定ページをご覧いただきありがとうございます。
 
-まだご検討中でしたら、いつでもお気軽にお声がけください。あなたの状況に合わせた最適な鑑定をご提案します。
+まだご検討中でしたら、ぜひこの機会にどうぞ💫
+あなたの状況に合わせた鑑定をお届けします。
 
-気になることがあればこのまま返信どうぞ💫`;
+ご質問があればいつでも返信してください。`;
 }
 
 // ── ルートハンドラー ─────────────────────────────────────
@@ -93,10 +93,7 @@ export async function POST(req: NextRequest) {
     const pushRes = await fetch(`${baseUrl}/api/line/push`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        to:   customer.line_user_id,
-        text: message,
-      }),
+      body:    JSON.stringify({ to: customer.line_user_id, text: message }),
     });
 
     if (!pushRes.ok) {
@@ -108,14 +105,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // アップセル送信をメモとして残す
+    // ── アップセル成約をログ + メッセージ履歴に記録 ───────
     if (type === "upsell") {
+      const variant = getLastClickVariant(customer_id);
+      if (variant) {
+        logUpsellEvent(customer_id, variant, upsell_price, true);
+      }
+
       await supabase.from("messages").insert({
         customer_id,
         source:    "crm",
         direction: "outbound",
         text:      `[アップセル送信] ¥${upsell_price.toLocaleString()} オファー`,
         raw_type:  "upsell",
+      });
+    } else {
+      // リマインドもメッセージ履歴に残す
+      await supabase.from("messages").insert({
+        customer_id,
+        source:    "crm",
+        direction: "outbound",
+        text:      `[自動リマインド] クリック後フォローアップ`,
+        raw_type:  "reminder_followup",
       });
     }
 

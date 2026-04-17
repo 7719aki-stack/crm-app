@@ -1,9 +1,12 @@
 // ─── ABテスト分析エンジン（サーバー専用）────────────────────
-// logs/reminder.log を解析して variant ごとの revenue_per_click を算出し、
+// logs/reminder.log を解析して variant ごとの profit_per_click を算出し、
 // 勝者バリアントを決定する。勝者は Supabase の ab_results テーブルに永続化。
 //
-// ⚠️ このモジュールは Node.js の fs を使うため、
-//    Server Component / API Route からのみ呼び出すこと。
+// 収益エンジン構造:
+//   click → purchase → upsell  すべてログ集計
+//   profit_per_click = (購入売上 + アップセル売上) / クリック数
+//
+// ⚠️ Node.js の fs を使うため Server Component / API Route 専用。
 
 import fs   from "fs";
 import path from "path";
@@ -17,22 +20,30 @@ export interface VariantStats {
   variant:         Variant;
   clicks:          number;
   purchases:       number;
-  totalAmount:     number;   // 売上合計（円）
-  cvr:             number;   // 0–1 の小数
-  revenuePerClick: number;   // 売上 / クリック数（収益最大化指標）
+  upsells:         number;   // アップセル成約数
+  totalAmount:     number;   // 購入売上合計（円）
+  upsellAmount:    number;   // アップセル売上合計（円）
+  cvr:             number;   // 購入率 purchases/clicks
+  upsellRate:      number;   // アップセル率 upsells/purchases
+  revenuePerClick: number;   // 購入売上のみ / クリック数
+  profitPerClick:  number;   // (購入売上 + アップセル売上) / クリック数（勝者判定指標）
 }
 
 export interface ABResult {
-  A:               VariantStats;
-  B:               VariantStats;
-  /** null = データ不足で判定不可（片方が MIN_CLICKS 未満） */
-  winner:          Variant | null;
-  winnerCVR:       number;
-  winnerRPC:       number;   // 勝者の revenue_per_click
-  totalClicks:     number;
-  totalPurchases:  number;
-  totalRevenue:    number;   // 全売上合計（円）
-  overallCVR:      number;
+  A:                  VariantStats;
+  B:                  VariantStats;
+  /** null = データ不足で判定不可 */
+  winner:             Variant | null;
+  winnerCVR:          number;
+  winnerRPC:          number;
+  winnerPPC:          number;   // 勝者の profit_per_click
+  totalClicks:        number;
+  totalPurchases:     number;
+  totalUpsells:       number;
+  totalRevenue:       number;   // 購入売上合計
+  totalUpsellRevenue: number;   // アップセル売上合計
+  overallCVR:         number;
+  overallUpsellRate:  number;
 }
 
 // ── 定数 ────────────────────────────────────────────────
@@ -43,24 +54,30 @@ const LOG_PATH = path.join(process.cwd(), "logs", "reminder.log");
 // ── ログ解析 ────────────────────────────────────────────
 
 interface LogEntry {
-  event?:       string;      // "click" | "purchase" | undefined（旧フォーマット = click）
+  event?:       string;      // "click" | "purchase" | "upsell" | undefined
   customerId?:  number;
   variant?:     string;
   sendCount?:   number;
-  clickedAt?:   string;      // 旧フォーマット互換
+  clickedAt?:   string;
   purchasedAt?: string;
-  price?:       number;      // 購入金額（purchase イベントのみ）
+  upsellAt?:    string;
+  price?:       number;
+  accepted?:    boolean;     // upsell イベントのみ
 }
 
 function parseLog(): {
-  clicks:    Record<Variant, number>;
-  purchases: Record<Variant, number>;
-  revenue:   Record<Variant, number>;
+  clicks:        Record<Variant, number>;
+  purchases:     Record<Variant, number>;
+  revenue:       Record<Variant, number>;
+  upsells:       Record<Variant, number>;
+  upsellRevenue: Record<Variant, number>;
 } {
   const result = {
-    clicks:    { A: 0, B: 0 } as Record<Variant, number>,
-    purchases: { A: 0, B: 0 } as Record<Variant, number>,
-    revenue:   { A: 0, B: 0 } as Record<Variant, number>,
+    clicks:        { A: 0, B: 0 } as Record<Variant, number>,
+    purchases:     { A: 0, B: 0 } as Record<Variant, number>,
+    revenue:       { A: 0, B: 0 } as Record<Variant, number>,
+    upsells:       { A: 0, B: 0 } as Record<Variant, number>,
+    upsellRevenue: { A: 0, B: 0 } as Record<Variant, number>,
   };
 
   if (!fs.existsSync(LOG_PATH)) return result;
@@ -72,13 +89,16 @@ function parseLog(): {
       const v = entry.variant as Variant | undefined;
       if (v !== "A" && v !== "B") continue;
 
-      // event フィールドがない旧エントリは click として扱う
       const ev = entry.event ?? (entry.clickedAt ? "click" : null);
+
       if (ev === "click") {
         result.clicks[v]++;
       } else if (ev === "purchase") {
         result.purchases[v]++;
         result.revenue[v] += typeof entry.price === "number" ? entry.price : 0;
+      } else if (ev === "upsell" && entry.accepted === true) {
+        result.upsells[v]++;
+        result.upsellRevenue[v] += typeof entry.price === "number" ? entry.price : 0;
       }
     } catch {
       // 壊れた行は無視
@@ -90,20 +110,31 @@ function parseLog(): {
 // ── 公開関数 ────────────────────────────────────────────
 
 /**
- * ログファイルを解析して ABResult を返す。キャッシュなし（常に再計算）。
- * 勝者判定は revenue_per_click（収益最大化）ベース。
+ * ログを解析して ABResult を返す（キャッシュなし）。
+ * 勝者判定は profit_per_click = (購入売上 + アップセル売上) / クリック数。
  */
 export function getABResult(): ABResult {
-  const { clicks, purchases, revenue } = parseLog();
+  const { clicks, purchases, revenue, upsells, upsellRevenue } = parseLog();
 
-  const makeStats = (v: Variant): VariantStats => ({
-    variant:         v,
-    clicks:          clicks[v],
-    purchases:       purchases[v],
-    totalAmount:     revenue[v],
-    cvr:             clicks[v] > 0 ? purchases[v] / clicks[v] : 0,
-    revenuePerClick: clicks[v] > 0 ? revenue[v] / clicks[v] : 0,
-  });
+  const makeStats = (v: Variant): VariantStats => {
+    const c   = clicks[v];
+    const p   = purchases[v];
+    const u   = upsells[v];
+    const rev = revenue[v];
+    const ups = upsellRevenue[v];
+    return {
+      variant:         v,
+      clicks:          c,
+      purchases:       p,
+      upsells:         u,
+      totalAmount:     rev,
+      upsellAmount:    ups,
+      cvr:             c > 0 ? p / c : 0,
+      upsellRate:      p > 0 ? u / p : 0,
+      revenuePerClick: c > 0 ? rev / c : 0,
+      profitPerClick:  c > 0 ? (rev + ups) / c : 0,
+    };
+  };
 
   const A = makeStats("A");
   const B = makeStats("B");
@@ -114,26 +145,31 @@ export function getABResult(): ABResult {
 
   let winner: Variant | null = null;
   if (enoughData) {
-    // revenue_per_click ベースで勝者決定（CVR より売上を優先）
-    if (A.revenuePerClick > B.revenuePerClick)      winner = "A";
-    else if (B.revenuePerClick > A.revenuePerClick) winner = "B";
-    // 同率の場合は null のまま（判定保留）
+    // profit_per_click ベースで勝者決定（購入 + アップセル 全利益で判定）
+    if (A.profitPerClick > B.profitPerClick)      winner = "A";
+    else if (B.profitPerClick > A.profitPerClick) winner = "B";
   }
 
-  const totalClicks    = A.clicks + B.clicks;
-  const totalPurchases = A.purchases + B.purchases;
-  const totalRevenue   = A.totalAmount + B.totalAmount;
-  const winnerStats    = winner ? (winner === "A" ? A : B) : null;
+  const totalClicks        = A.clicks + B.clicks;
+  const totalPurchases     = A.purchases + B.purchases;
+  const totalUpsells       = A.upsells + B.upsells;
+  const totalRevenue       = A.totalAmount + B.totalAmount;
+  const totalUpsellRevenue = A.upsellAmount + B.upsellAmount;
+  const winnerStats        = winner ? (winner === "A" ? A : B) : null;
 
   return {
     A, B,
     winner,
-    winnerCVR:  winnerStats?.cvr ?? 0,
-    winnerRPC:  winnerStats?.revenuePerClick ?? 0,
+    winnerCVR:         winnerStats?.cvr ?? 0,
+    winnerRPC:         winnerStats?.revenuePerClick ?? 0,
+    winnerPPC:         winnerStats?.profitPerClick ?? 0,
     totalClicks,
     totalPurchases,
+    totalUpsells,
     totalRevenue,
-    overallCVR: totalClicks > 0 ? totalPurchases / totalClicks : 0,
+    totalUpsellRevenue,
+    overallCVR:        totalClicks    > 0 ? totalPurchases / totalClicks : 0,
+    overallUpsellRate: totalPurchases > 0 ? totalUpsells   / totalPurchases : 0,
   };
 }
 
@@ -148,6 +184,9 @@ export function detectABAnomaly(result: ABResult): string[] {
     }
     if (s.purchases > s.clicks) {
       warnings.push(`Variant ${s.variant}: 購入数(${s.purchases})がクリック数(${s.clicks})を超過（ログバグ）`);
+    }
+    if (s.upsells > s.purchases) {
+      warnings.push(`Variant ${s.variant}: アップセル数(${s.upsells})が購入数(${s.purchases})を超過（ログバグ）`);
     }
   }
   return warnings;
@@ -211,23 +250,35 @@ export async function loadABResultFromDB(): Promise<{
 }
 
 /**
- * ログに purchase イベントを追記する（price 付き）。
- * appraisals paid=1 確定時に API Route から呼ぶ。
+ * purchase イベントをログに追記。appraisals paid=1 時に呼ぶ。
  */
 export function logPurchaseEvent(customerId: number, variant: Variant, price: number): void {
-  const entry = {
+  appendLog({
     event:       "purchase",
     customerId,
     variant,
     price,
     purchasedAt: new Date().toISOString(),
-  };
-  try {
-    fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
-    fs.appendFileSync(LOG_PATH, JSON.stringify(entry) + "\n");
-  } catch (e) {
-    console.error("[logPurchaseEvent] write failed:", e);
-  }
+  });
+}
+
+/**
+ * upsell イベントをログに追記。/api/upsell 成功時に呼ぶ。
+ */
+export function logUpsellEvent(
+  customerId: number,
+  variant:    Variant,
+  price:      number,
+  accepted:   boolean,
+): void {
+  appendLog({
+    event:     "upsell",
+    customerId,
+    variant,
+    price,
+    accepted,
+    upsellAt:  new Date().toISOString(),
+  });
 }
 
 /**
@@ -248,4 +299,15 @@ export function getLastClickVariant(customerId: number): Variant | null {
     } catch {}
   }
   return null;
+}
+
+// ── 内部ヘルパー ─────────────────────────────────────────
+
+function appendLog(entry: Record<string, unknown>): void {
+  try {
+    fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
+    fs.appendFileSync(LOG_PATH, JSON.stringify(entry) + "\n");
+  } catch (e) {
+    console.error("[abTest] appendLog failed:", e);
+  }
 }

@@ -28,6 +28,66 @@ export interface ReminderItem {
 const LS_KEY        = "crm_reminder_queue_v1";
 const AB_CACHE_KEY  = "crm_ab_winner_cache_v2"; // APIから取得した勝者をキャッシュ
 const AB_CACHE_TTL  = 5 * 60 * 1000;            // 5分でキャッシュ失効 → 再フェッチ
+const FOLLOWUP_KEY  = "crm_click_followup_v1";  // クリック後フォローアップキュー
+
+// ── クリックフォローアップ型 ──────────────────────────────────────────────────
+
+/** クリックしたが未購入の顧客を追跡するキュー */
+export interface ClickFollowUp {
+  customerId:    number;
+  variant:       "A" | "B";
+  clickedAt:     string;   // ISO datetime
+  remindedAt30m: boolean;  // 30分後リマインド送信済み
+  remindedAt24h: boolean;  // 24時間後リマインド送信済み
+  done:          boolean;  // 購入済みまたは追撃完了
+}
+
+// ── フォローアップキュー操作 ──────────────────────────────────────────────────
+
+function fuRead(): ClickFollowUp[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(FOLLOWUP_KEY);
+    return raw ? (JSON.parse(raw) as ClickFollowUp[]) : [];
+  } catch { return []; }
+}
+
+function fuWrite(items: ClickFollowUp[]): void {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(FOLLOWUP_KEY, JSON.stringify(items)); } catch {}
+}
+
+/** クリック時にフォローアップキューへ登録する（markReminderClicked から呼ぶ） */
+export function registerClickFollowUp(
+  customerId: number,
+  variant:    "A" | "B",
+  clickedAt:  string,
+): void {
+  const all = fuRead();
+  const exists = all.some((f) => f.customerId === customerId && !f.done);
+  if (exists) return; // 重複登録しない
+  fuWrite([...all, { customerId, variant, clickedAt, remindedAt30m: false, remindedAt24h: false, done: false }]);
+}
+
+/** フォローアップキューの未完了リストを返す */
+export function getClickFollowUps(): ClickFollowUp[] {
+  return fuRead().filter((f) => !f.done);
+}
+
+/** 指定顧客を購入済み（done）としてマーク */
+export function markFollowUpDone(customerId: number): void {
+  fuWrite(fuRead().map((f) => f.customerId === customerId ? { ...f, done: true } : f));
+}
+
+/** 30m または 24h リマインド済みとしてマーク */
+export function markFollowUpReminded(customerId: number, stage: "30m" | "24h"): void {
+  fuWrite(fuRead().map((f) => {
+    if (f.customerId !== customerId) return f;
+    return stage === "30m"
+      ? { ...f, remindedAt30m: true }
+      : { ...f, remindedAt24h: true };
+  }));
+}
 
 // ── phase 別遅延解決 ──────────────────────────────────────────────────────────
 
@@ -216,6 +276,9 @@ export function markReminderClicked(customerId: number): void {
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify(log),
     }).catch(() => {});
+
+    // クリック後フォローアップキューへ登録（未購入なら30min・24h後に自動追撃）
+    registerClickFollowUp(target.customerId, target.variant, clickedAt);
   }
 
   lsWrite(

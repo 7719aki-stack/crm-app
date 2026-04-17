@@ -66,12 +66,16 @@ export default async function DashboardPage() {
   let clickCount        = 0;
   let avgOrderValue     = 0;
   let ltv               = 0;
+  let upsellCount       = 0;
+  let upsellRate        = 0;
+  let upsellRevenue     = 0;
   let abAnomalies: string[] = [];
   let abResult: import("@/lib/getSalesSummary").ABResult = {
-    A: { variant: "A", clicks: 0, purchases: 0, totalAmount: 0, cvr: 0, revenuePerClick: 0 },
-    B: { variant: "B", clicks: 0, purchases: 0, totalAmount: 0, cvr: 0, revenuePerClick: 0 },
-    winner: null, winnerCVR: 0, winnerRPC: 0,
-    totalClicks: 0, totalPurchases: 0, totalRevenue: 0, overallCVR: 0,
+    A: { variant: "A", clicks: 0, purchases: 0, upsells: 0, totalAmount: 0, upsellAmount: 0, cvr: 0, upsellRate: 0, revenuePerClick: 0, profitPerClick: 0 },
+    B: { variant: "B", clicks: 0, purchases: 0, upsells: 0, totalAmount: 0, upsellAmount: 0, cvr: 0, upsellRate: 0, revenuePerClick: 0, profitPerClick: 0 },
+    winner: null, winnerCVR: 0, winnerRPC: 0, winnerPPC: 0,
+    totalClicks: 0, totalPurchases: 0, totalUpsells: 0,
+    totalRevenue: 0, totalUpsellRevenue: 0, overallCVR: 0, overallUpsellRate: 0,
   };
   let recentSales: {
     id: number;
@@ -114,6 +118,9 @@ export default async function DashboardPage() {
     clickCount        = summary.clickCount;
     avgOrderValue     = summary.avgOrderValue;
     ltv               = summary.ltv;
+    upsellCount       = summary.upsellCount;
+    upsellRate        = summary.upsellRate;
+    upsellRevenue     = summary.upsellRevenue;
     abResult          = summary.abResult;
     abAnomalies       = detectABAnomaly(summary.abResult);
 
@@ -266,7 +273,7 @@ export default async function DashboardPage() {
           },
           {
             label:    "LTV",
-            sublabel: "顧客あたり累計売上",
+            sublabel: "購入者あたり累計（含アップセル）",
             valueStr: ltv > 0 ? `¥${Math.round(ltv).toLocaleString()}` : "—",
             iconCls:  "bg-rose-100 text-rose-600",
             valCls:   "text-rose-700",
@@ -277,23 +284,25 @@ export default async function DashboardPage() {
             ),
           },
           {
-            label:    "Variant A RPC",
-            sublabel: "revenue per click",
-            valueStr: abResult.A.clicks > 0 ? `¥${Math.round(abResult.A.revenuePerClick).toLocaleString()}` : "—",
-            iconCls:  abResult.winner === "A" ? "bg-emerald-100 text-emerald-600" : "bg-gray-100 text-gray-500",
-            valCls:   abResult.winner === "A" ? "text-emerald-700" : "text-gray-600",
+            label:    "アップセル率",
+            sublabel: `${upsellCount}件成約 / ¥${upsellRevenue.toLocaleString()}`,
+            valueStr: upsellRate > 0 ? `${(upsellRate * 100).toFixed(1)}%` : "—",
+            iconCls:  "bg-amber-100 text-amber-600",
+            valCls:   "text-amber-700",
             icon: (
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
               </svg>
             ),
           },
           {
-            label:    "Variant B RPC",
-            sublabel: "revenue per click",
-            valueStr: abResult.B.clicks > 0 ? `¥${Math.round(abResult.B.revenuePerClick).toLocaleString()}` : "—",
-            iconCls:  abResult.winner === "B" ? "bg-emerald-100 text-emerald-600" : "bg-gray-100 text-gray-500",
-            valCls:   abResult.winner === "B" ? "text-emerald-700" : "text-gray-600",
+            label:    "profit / click",
+            sublabel: "購入+アップセル合算",
+            valueStr: (abResult.A.clicks + abResult.B.clicks) > 0
+              ? `¥${Math.round((abResult.totalRevenue + abResult.totalUpsellRevenue) / (abResult.totalClicks || 1)).toLocaleString()}`
+              : "—",
+            iconCls:  "bg-emerald-100 text-emerald-600",
+            valCls:   "text-emerald-700",
             icon: (
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -457,6 +466,68 @@ export default async function DashboardPage() {
             </p>
           )}
         </div>
+
+        {/* variant 比較テーブル */}
+        {abResult.totalClicks > 0 && (
+          <div className="px-5 pb-5">
+            <p className="text-xs font-semibold text-gray-500 mb-2">Variant 詳細比較</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-gray-400 border-b border-gray-100">
+                    <th className="text-left pb-2 font-medium">Variant</th>
+                    <th className="text-right pb-2 font-medium">クリック</th>
+                    <th className="text-right pb-2 font-medium">購入</th>
+                    <th className="text-right pb-2 font-medium">CVR</th>
+                    <th className="text-right pb-2 font-medium">購入売上</th>
+                    <th className="text-right pb-2 font-medium">アップセル率</th>
+                    <th className="text-right pb-2 font-medium">アップセル売上</th>
+                    <th className="text-right pb-2 font-medium">profit/click</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(["A", "B"] as const).map((v) => {
+                    const s        = abResult[v];
+                    const isWinner = abResult.winner === v;
+                    return (
+                      <tr
+                        key={v}
+                        className={`border-b border-gray-50 ${isWinner ? "bg-emerald-50/60" : ""}`}
+                      >
+                        <td className="py-2 pr-3">
+                          <span className={`font-bold ${isWinner ? "text-emerald-700" : "text-gray-700"}`}>
+                            {v}
+                            {isWinner && <span className="ml-1 text-[10px] text-emerald-600">★</span>}
+                          </span>
+                        </td>
+                        <td className="text-right py-2 text-gray-700">{s.clicks}</td>
+                        <td className="text-right py-2 text-gray-700">{s.purchases}</td>
+                        <td className="text-right py-2 text-gray-700">
+                          {s.clicks > 0 ? `${(s.cvr * 100).toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="text-right py-2 text-gray-700">
+                          {s.totalAmount > 0 ? `¥${s.totalAmount.toLocaleString()}` : "—"}
+                        </td>
+                        <td className={`text-right py-2 ${s.upsellRate > 0 ? "text-amber-600 font-semibold" : "text-gray-400"}`}>
+                          {s.purchases > 0 ? `${(s.upsellRate * 100).toFixed(0)}%` : "—"}
+                        </td>
+                        <td className="text-right py-2 text-gray-700">
+                          {s.upsellAmount > 0 ? `¥${s.upsellAmount.toLocaleString()}` : "—"}
+                        </td>
+                        <td className={`text-right py-2 font-bold ${isWinner ? "text-emerald-600" : "text-gray-600"}`}>
+                          {s.clicks > 0 ? `¥${Math.round(s.profitPerClick).toLocaleString()}` : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-gray-300 mt-2">
+              勝者判定: profit/click = (購入売上 + アップセル売上) / クリック数
+            </p>
+          </div>
+        )}
       </div>
 
       {/* ── 優先対応顧客 ────────────────────────────────── */}

@@ -190,3 +190,23 @@ export async function cancelSchedule(
 
   if (error) throw error;
 }
+
+/**
+ * 指定顧客の pending シナリオスケジュールを全件キャンセルする。
+ * 停止条件に該当した場合に呼び出し、残りステップを無効化する。
+ */
+export async function cancelCustomerPendingSchedules(
+  customerId: number,
+  db: SupabaseClient = defaultDb,
+): Promise<void> {
+  const { error } = await db
+    .from("scenario_schedules")
+    .update({
+      status:     "cancelled",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("customer_id", customerId)
+    .eq("status",      "pending");
+
+  if (error) throw error;
+}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
+import { createEducationSchedules } from "@/lib/educationScenario";
 import type { CustomerRow } from "@/app/customers/dummyData";
 
 // ─── GET /api/customers ────────────────────────────────────
@@ -92,6 +93,11 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error || !row) throw error ?? new Error("insert returned null");
+
+    // 顧客作成時に教育シナリオを自動生成（失敗しても顧客作成は成功扱い）
+    createEducationSchedules(row.id).catch((e) =>
+      console.warn("[POST /api/customers] 教育シナリオ生成失敗:", e),
+    );
 
     return NextResponse.json(
       { ...row, tags: JSON.parse(row.tags) },

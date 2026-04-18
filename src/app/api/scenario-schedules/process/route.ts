@@ -50,6 +50,18 @@ function tokenFingerprint(token: string | undefined): string {
   return `${token.slice(0, 6)}...${token.slice(-6)}`;
 }
 
+function safeStringify(v: unknown): string {
+  try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+}
+
+function toErrorReason(e: unknown): string {
+  if (e instanceof LineApiError) {
+    return `line_api_error:${e.httpStatus} ${safeStringify(e.detail)}`;
+  }
+  if (e instanceof Error) return e.message;
+  try { return JSON.stringify(e, null, 2); } catch { return String(e); }
+}
+
 // ─── メイン処理 ───────────────────────────────────────────
 async function runProcess() {
   const now = new Date();
@@ -131,11 +143,7 @@ async function runProcess() {
       await markScheduleSent(s.id);
       results.push({ id: s.id, customer_id: s.customer_id, step_no: s.step_no, ok: true });
     } catch (e) {
-      const reason = e instanceof LineApiError
-        ? `line_api_error:${e.httpStatus} ${JSON.stringify(e.detail)}`
-        : e instanceof Error
-          ? e.message
-          : JSON.stringify(e);
+      const reason = toErrorReason(e);
       // pending のまま残して次回 cron でリトライ可能
       console.error(`[process] LINE送信失敗 schedule.id=${s.id} customer_id=${s.customer_id} reason=${reason}`, e);
       results.push({ id: s.id, customer_id: s.customer_id, step_no: s.step_no, ok: false, reason });
@@ -177,8 +185,9 @@ export async function GET(req: NextRequest) {
     console.log("[process cron]", JSON.stringify({ sent: result.sent, skipped: result.skipped, failed: result.failed }));
     return NextResponse.json(result);
   } catch (e) {
-    console.error("[GET /api/scenario-schedules/process]", e);
-    return NextResponse.json({ error: "処理に失敗しました" }, { status: 500 });
+    const reason = toErrorReason(e);
+    console.error("[GET /api/scenario-schedules/process]", reason, e);
+    return NextResponse.json({ error: reason }, { status: 500 });
   }
 }
 
@@ -189,7 +198,8 @@ export async function POST() {
     const result = await runProcess();
     return NextResponse.json(result);
   } catch (e) {
-    console.error("[POST /api/scenario-schedules/process]", e);
-    return NextResponse.json({ error: "処理に失敗しました" }, { status: 500 });
+    const reason = toErrorReason(e);
+    console.error("[POST /api/scenario-schedules/process]", reason, e);
+    return NextResponse.json({ error: reason }, { status: 500 });
   }
 }

@@ -174,9 +174,9 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
         {[
           {
-            label: "新規顧客",
-            sublabel: "リード段階",
-            value: leadCount,
+            label: "顧客総数",
+            sublabel: "登録顧客",
+            value: customers.length,
             unit: "名",
             iconCls: "bg-blue-100 text-blue-600",
             valCls: "text-blue-700",

@@ -67,37 +67,35 @@ const bottomNav: NavItem[] = [
   { label: "設定", href: "/settings", icon: IconSettings },
 ];
 
+// ── NavLink（Sidebar外で定義して毎レンダーの再生成を防ぐ）────
+function NavLink({ item }: { item: NavItem }) {
+  const pathname = usePathname();
+  const active = item.sub
+    ? pathname.startsWith("/customers/")
+    : pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+
+  return (
+    <Link
+      href={item.href}
+      className={`
+        group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+        transition-all duration-150
+        ${item.sub ? "ml-4" : ""}
+        ${active
+          ? "bg-brand-500/15 text-brand-300 border-l-2 border-brand-400 pl-[10px]"
+          : "text-gray-400 hover:text-gray-100 hover:bg-white/5 border-l-2 border-transparent"
+        }
+      `}
+    >
+      <item.icon className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${active ? "text-brand-400" : "text-gray-500 group-hover:text-gray-300"}`} />
+      <span className="truncate">{item.label}</span>
+      {active && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-brand-400 flex-shrink-0" />}
+    </Link>
+  );
+}
+
 // ── Component ──────────────────────────────────────────
 export function Sidebar() {
-  const pathname = usePathname();
-
-  function isActive(href: string, sub?: boolean) {
-    if (sub) return pathname.startsWith("/customers/");
-    return pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
-  }
-
-  function NavLink({ item }: { item: NavItem }) {
-    const active = isActive(item.href, item.sub);
-    return (
-      <Link
-        href={item.href}
-        className={`
-          group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-          transition-all duration-150
-          ${item.sub ? "ml-4" : ""}
-          ${active
-            ? "bg-brand-500/15 text-brand-300 border-l-2 border-brand-400 pl-[10px]"
-            : "text-gray-400 hover:text-gray-100 hover:bg-white/5 border-l-2 border-transparent"
-          }
-        `}
-      >
-        <item.icon className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${active ? "text-brand-400" : "text-gray-500 group-hover:text-gray-300"}`} />
-        <span className="truncate">{item.label}</span>
-        {active && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-brand-400 flex-shrink-0" />}
-      </Link>
-    );
-  }
-
   return (
     <aside className="w-60 flex-shrink-0 bg-[#0d1117] flex flex-col h-screen sticky top-0">
       {/* ロゴ */}

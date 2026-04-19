@@ -75,14 +75,21 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, display_name, contact, status, tags, notes } = body;
 
-    if (!name || !name.trim()) {
-      return NextResponse.json({ error: "名前は必須です" }, { status: 400 });
+    const trimmedName = typeof name === "string" ? name.trim() : "";
+    if (!trimmedName) {
+      return NextResponse.json({ error: "名前を入力してください" }, { status: 400 });
+    }
+    if (trimmedName.length < 2) {
+      return NextResponse.json({ error: "名前は2文字以上で入力してください" }, { status: 400 });
+    }
+    if (!/[a-zA-Z0-9\u3040-\u9fff\uff00-\uffef]/.test(trimmedName)) {
+      return NextResponse.json({ error: "記号のみの名前は登録できません（日本語・英数字を含めてください）" }, { status: 400 });
     }
 
     const { data: row, error } = await supabase
       .from("customers")
       .insert({
-        name:         name.trim(),
+        name:         trimmedName,
         display_name: display_name?.trim() || null,
         contact:      contact?.trim()      || null,
         status:       status               || "new_reg",

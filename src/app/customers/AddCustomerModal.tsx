@@ -3,6 +3,17 @@
 import { useState, useRef, useEffect } from "react";
 type CustomerStatus = string;
 
+function validateName(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "名前を入力してください";
+  if (trimmed.length < 2) return "名前は2文字以上で入力してください";
+  // 日本語（ひらがな・カタカナ・漢字）・英数字・全角英数を1文字以上含むこと
+  if (!/[a-zA-Z0-9\u3040-\u9fff\uff00-\uffef]/.test(trimmed)) {
+    return "記号のみの名前は登録できません（日本語・英数字を含めてください）";
+  }
+  return null;
+}
+
 const STATUS_OPTIONS: CustomerStatus[] = ["new_reg", "educating", "paid_purchased", "dormant"];
 
 interface Props {
@@ -40,8 +51,9 @@ export function AddCustomerModal({ onClose, onSuccess }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) {
-      setError("名前を入力してください");
+    const nameError = validateName(name);
+    if (nameError) {
+      setError(nameError);
       return;
     }
     setLoading(true);

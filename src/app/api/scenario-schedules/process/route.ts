@@ -148,9 +148,15 @@ async function runProcess() {
       await markScheduleSent(s.id);
       results.push({ id: s.id, customer_id: s.customer_id, step_no: s.step_no, ok: true });
     } catch (e) {
+      // raw error をログ → Vercel Runtime Logs で型・内容を確認できる
+      console.error(`[process] LINE送信失敗RAW schedule.id=${s.id}`, {
+        errorType: Object.prototype.toString.call(e),
+        isError: e instanceof Error,
+        keys: e !== null && typeof e === "object" ? Object.keys(e) : null,
+        raw: safeStringify(e),
+      });
       const reason = toErrorReason(e);
-      // pending のまま残して次回 cron でリトライ可能
-      console.error(`[process] LINE送信失敗 schedule.id=${s.id} customer_id=${s.customer_id} reason=${reason}`, e);
+      console.error(`[process] LINE送信失敗 schedule.id=${s.id} customer_id=${s.customer_id} reason=${reason}`);
       results.push({ id: s.id, customer_id: s.customer_id, step_no: s.step_no, ok: false, reason });
     }
   }
@@ -165,6 +171,9 @@ async function runProcess() {
     skipped,
     failed,
     results,
+    debugVersion: "process-debug-v3",
+    routeFile:    "src/app/api/scenario-schedules/process/route.ts",
+    commitHint:   "toErrorReason-fix+debug-v3",
     debug: {
       tokenFingerprint: tokenFingerprint(process.env.LINE_CHANNEL_ACCESS_TOKEN),
       apiUrl: "https://api.line.me/v2/bot/message/push",

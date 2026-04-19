@@ -123,6 +123,15 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
         nextAction:   nextAction || null,
       });
 
+      // 次回アクション日を DB に保存
+      if (nextAction) {
+        await fetch(`/api/customers/${customerId}`, {
+          method:  "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ next_action: nextAction }),
+        });
+      }
+
       onSent(entry);
       setPhase("done");
     } catch (err) {

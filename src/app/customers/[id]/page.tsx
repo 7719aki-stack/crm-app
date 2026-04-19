@@ -163,6 +163,7 @@ export default function CustomerDetailPage() {
   const [editLineId,      setEditLineId]      = useState(false);
   const [savingLineId,    setSavingLineId]    = useState(false);
   const [savingTags,      setSavingTags]      = useState(false);
+  const [savingStatus,    setSavingStatus]    = useState(false);
   const [scenarioRefreshKey, setScenarioRefreshKey] = useState(0);
   const [lineMessage,     setLineMessageState] = useState("");
   const [lineInjectKey,   setLineInjectKey]   = useState(0);
@@ -327,6 +328,24 @@ export default function CustomerDetailPage() {
     setSavingTags(false);
   }
 
+  // ── ステータス保存 ───────────────────────────────────────
+  async function saveStatus() {
+    setSavingStatus(true);
+    try {
+      const res = await fetch(`/api/customers/${customerId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error("保存に失敗しました");
+      setCustomer((prev) => prev ? { ...prev, status } : null);
+    } catch (e) {
+      console.error("[saveStatus]", e);
+    } finally {
+      setSavingStatus(false);
+    }
+  }
+
   // ── LINE ID 保存 ─────────────────────────────────────────
   async function save_line_user_id() {
     setSavingLineId(true);
@@ -454,6 +473,15 @@ export default function CustomerDetailPage() {
               onChange={setStatus}
               unsaved={status !== customer.status}
             />
+            {status !== customer.status && (
+              <button
+                onClick={saveStatus}
+                disabled={savingStatus}
+                className="mt-2 text-xs bg-brand-600 text-white px-3 py-1.5 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors"
+              >
+                {savingStatus ? "保存中…" : "ステータスを保存"}
+              </button>
+            )}
           </div>
 
           {/* クイック統計 */}
@@ -586,6 +614,10 @@ export default function CustomerDetailPage() {
               customerStatus={status}
               onSent={(entry) => {
                 setActions((prev) => [entry, ...prev]);
+                // 次回アクション日が記録されていれば customer state にも反映（表示を即時更新）
+                if (entry.nextAction) {
+                  setCustomer((prev) => prev ? { ...prev, next_action: entry.nextAction ?? null } : null);
+                }
                 // 送信成功後、下書きをクリアして編集済みフラグをリセット
                 // setLineMessage は使わず直接更新（isLineEdited が true でも確実にクリアするため）
                 console.log("[lineMessage set]", "send-complete", '""');

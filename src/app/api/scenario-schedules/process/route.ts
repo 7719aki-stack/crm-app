@@ -59,7 +59,12 @@ function toErrorReason(e: unknown): string {
     return `line_api_error:${e.httpStatus} ${safeStringify(e.detail)}`;
   }
   if (e instanceof Error) return e.message;
-  try { return JSON.stringify(e, null, 2); } catch { return String(e); }
+  // Supabase PostgrestError などの plain object で message を持つ場合
+  if (e !== null && typeof e === "object" && "message" in e) {
+    const msg = (e as { message: unknown }).message;
+    if (typeof msg === "string" && msg) return msg;
+  }
+  return safeStringify(e);
 }
 
 // ─── メイン処理 ───────────────────────────────────────────

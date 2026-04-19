@@ -14,7 +14,12 @@ function validateName(value: string): string | null {
   return null;
 }
 
-const STATUS_OPTIONS: CustomerStatus[] = ["new_reg", "educating", "paid_purchased", "dormant"];
+const STATUS_OPTIONS: { value: CustomerStatus; label: string }[] = [
+  { value: "new_reg",         label: "新規登録" },
+  { value: "educating",       label: "教育中" },
+  { value: "paid_purchased",  label: "有料購入" },
+  { value: "dormant",         label: "休眠" },
+];
 
 interface Props {
   onClose: () => void;
@@ -25,7 +30,7 @@ export function AddCustomerModal({ onClose, onSuccess }: Props) {
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [contact, setContact] = useState("");
-  const [status, setStatus] = useState<CustomerStatus>("新規");
+  const [status, setStatus] = useState<CustomerStatus>("new_reg");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
@@ -146,16 +151,16 @@ export function AddCustomerModal({ onClose, onSuccess }: Props) {
             <div className="flex gap-2">
               {STATUS_OPTIONS.map((s) => (
                 <button
-                  key={s}
+                  key={s.value}
                   type="button"
-                  onClick={() => setStatus(s)}
+                  onClick={() => setStatus(s.value)}
                   className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    status === s
+                    status === s.value
                       ? "bg-brand-600 text-white"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >
-                  {s}
+                  {s.label}
                 </button>
               ))}
             </div>

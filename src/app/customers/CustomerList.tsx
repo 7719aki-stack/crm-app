@@ -12,6 +12,7 @@ import {
   type Temperature,
   type CrisisLevel,
 } from "./dummyData";
+import { AddCustomerModal } from "./AddCustomerModal";
 
 // ─── グループフィルタータブ ────────────────────────────
 type GroupFilter = StatusGroup | "all";
@@ -243,9 +244,10 @@ export function CustomerList() {
   const [searchText,   setSearchText]   = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [loading,      setLoading]      = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
 
-  useEffect(() => {
-    // DB から顧客データを取得
+  function loadCustomers() {
+    setLoading(true);
     fetch("/api/customers")
       .then((r) => {
         if (!r.ok) throw new Error(`API error: ${r.status}`);
@@ -257,7 +259,10 @@ export function CustomerList() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-    // タグマスタを読み込む
+  }
+
+  useEffect(() => {
+    loadCustomers();
     setTagGroups(loadTagMaster());
   }, []);
 
@@ -284,13 +289,22 @@ export function CustomerList() {
 
   return (
     <div>
+      {showAddModal && (
+        <AddCustomerModal
+          onClose={() => setShowAddModal(false)}
+          onSuccess={() => {
+            setShowAddModal(false);
+            loadCustomers();
+          }}
+        />
+      )}
+
       {/* ページヘッダー */}
       <div className="flex items-center justify-between mb-5">
         <div />
         <button
-          disabled
-          className="flex items-center gap-2 bg-brand-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg opacity-50 cursor-not-allowed"
-          title="次フェーズで実装"
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-2 bg-brand-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-brand-700 transition-colors"
         >
           <span className="text-base leading-none">+</span>
           新規顧客を追加

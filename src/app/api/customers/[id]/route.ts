@@ -92,13 +92,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const body = await req.json() as Record<string, unknown>;
 
-    const allowed = ["status", "tags", "notes", "line_user_id", "category", "crisis_level", "temperature", "next_action"] as const;
+    const allowed = ["name", "display_name", "status", "tags", "notes", "line_user_id", "category", "crisis_level", "temperature", "next_action"] as const;
     const updates: Record<string, unknown> = {};
 
     for (const key of allowed) {
       if (key in body) {
         updates[key] = key === "tags" ? JSON.stringify(body[key]) : body[key];
       }
+    }
+
+    if ("name" in updates) {
+      const n = typeof updates["name"] === "string" ? updates["name"].trim() : "";
+      if (!n || n.length < 2 || !/[a-zA-Z0-9\u3040-\u9fff\uff00-\uffef]/.test(n)) {
+        return NextResponse.json({ error: "名前が無効です（2文字以上、日本語・英数字を含めてください）" }, { status: 400 });
+      }
+      updates["name"] = n;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -118,5 +126,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   } catch (e) {
     console.error("[PATCH /api/customers/[id]]", e);
     return NextResponse.json({ error: "更新に失敗しました" }, { status: 500 });
+  }
+}
+
+// ─── DELETE /api/customers/[id] ───────────────────────
+export async function DELETE(_req: NextRequest, { params }: Params) {
+  const { id } = await params;
+  const customerId = Number(id);
+  if (isNaN(customerId)) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  }
+
+  try {
+    await supabase.from("scenario_schedules").delete().eq("customer_id", customerId);
+    await supabase.from("appraisals").delete().eq("customer_id", customerId);
+    await supabase.from("messages").delete().eq("customer_id", customerId);
+    const { error } = await supabase.from("customers").delete().eq("id", customerId);
+    if (error) throw error;
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[DELETE /api/customers/[id]]", e);
+    return NextResponse.json({ error: "削除に失敗しました" }, { status: 500 });
   }
 }

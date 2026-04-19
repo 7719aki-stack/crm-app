@@ -126,7 +126,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         text,
       })
       .select("id, customer_id, source, direction, text, raw_type, created_at")
-      .single<DbMessage>();
+      .single();
 
     if (error) throw error;
 

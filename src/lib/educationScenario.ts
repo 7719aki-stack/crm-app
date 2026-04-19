@@ -4,7 +4,9 @@
 // このファイルは API Route / Server Component からのみインポートすること。
 
 import { supabase as defaultDb } from "@/lib/db";
-import type { SupabaseClient } from "@supabase/supabase-js";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DbClient = { from: (table: string) => any };
 
 // ─── 型定義 ────────────────────────────────────────────────
 
@@ -67,7 +69,7 @@ export const EDUCATION_STEPS: EducationStep[] = [
 export async function createEducationSchedules(
   customerId: number,
   baseDate: Date = new Date(),
-  db: SupabaseClient = defaultDb,
+  db: DbClient = defaultDb,
 ): Promise<ScenarioSchedule[]> {
   // 重複チェック: pending または sent が存在するかを確認
   const { data: existing } = await db
@@ -108,7 +110,7 @@ export async function createEducationSchedules(
  */
 export async function getCustomerScenarioSchedules(
   customerId: number,
-  db: SupabaseClient = defaultDb,
+  db: DbClient = defaultDb,
 ): Promise<ScenarioSchedule[]> {
   const { data, error } = await db
     .from("scenario_schedules")
@@ -128,7 +130,7 @@ export async function getCustomerScenarioSchedules(
  */
 export async function getDueSchedules(
   now: Date = new Date(),
-  db: SupabaseClient = defaultDb,
+  db: DbClient = defaultDb,
 ): Promise<ScenarioSchedule[]> {
   const { data, error } = await db
     .from("scenario_schedules")
@@ -149,7 +151,7 @@ export async function getDueSchedules(
  */
 export async function markScheduleSent(
   id: number,
-  db: SupabaseClient = defaultDb,
+  db: DbClient = defaultDb,
 ): Promise<boolean> {
   const { data: current } = await db
     .from("scenario_schedules")
@@ -178,7 +180,7 @@ export async function markScheduleSent(
  */
 export async function cancelSchedule(
   id: number,
-  db: SupabaseClient = defaultDb,
+  db: DbClient = defaultDb,
 ): Promise<void> {
   const { error } = await db
     .from("scenario_schedules")
@@ -197,7 +199,7 @@ export async function cancelSchedule(
  */
 export async function cancelCustomerPendingSchedules(
   customerId: number,
-  db: SupabaseClient = defaultDb,
+  db: DbClient = defaultDb,
 ): Promise<void> {
   const { error } = await db
     .from("scenario_schedules")

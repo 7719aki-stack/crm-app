@@ -12,16 +12,16 @@ import {
   getDueSchedules,
   markScheduleSent,
 } from "../educationScenario";
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 // ── インメモリ DB モック ───────────────────────────────────────────────────────
 
 type Row = Record<string, unknown>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DbClient = { from: (table: string) => any };
 
 let store: Row[] = [];
 let nextId = 1;
 
-function makeDb(): SupabaseClient {
+function makeDb(): DbClient {
   return {
     from(_table: string) {
       const filters: Array<(row: Row) => boolean> = [];
@@ -104,7 +104,7 @@ function makeDb(): SupabaseClient {
 
       return chain;
     },
-  } as unknown as SupabaseClient;
+  } as unknown as DbClient;
 }
 
 // ── 各テスト前にストアをリセット ─────────────────────────────────────────────

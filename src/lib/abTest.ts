@@ -244,8 +244,13 @@ export async function loadABResultFromDB(): Promise<{
   return {
     ...data,
     winner:              w,
+    click_count_a:       typeof d.click_count_a       === "number" ? d.click_count_a       : 0,
+    click_count_b:       typeof d.click_count_b       === "number" ? d.click_count_b       : 0,
+    cvr_a:               typeof d.cvr_a               === "number" ? d.cvr_a               : 0,
+    cvr_b:               typeof d.cvr_b               === "number" ? d.cvr_b               : 0,
     revenue_per_click_a: typeof d.revenue_per_click_a === "number" ? d.revenue_per_click_a : 0,
     revenue_per_click_b: typeof d.revenue_per_click_b === "number" ? d.revenue_per_click_b : 0,
+    decided_at:          typeof d.decided_at           === "string" ? d.decided_at           : "",
   };
 }
 

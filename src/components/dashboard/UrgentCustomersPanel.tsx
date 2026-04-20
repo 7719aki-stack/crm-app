@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export interface UrgentCustomer {
@@ -14,9 +13,10 @@ interface Props {
   initialCustomers: UrgentCustomer[];
 }
 
-function getTomorrow(): string {
+// 対応後の次回アクション日を計算（現状: 固定+3日）
+function getNextActionDate(daysAhead = 3): string {
   const d = new Date();
-  d.setDate(d.getDate() + 1);
+  d.setDate(d.getDate() + daysAhead);
   return d.toISOString().slice(0, 10);
 }
 
@@ -25,7 +25,6 @@ function getToday(): string {
 }
 
 export default function UrgentCustomersPanel({ initialCustomers }: Props) {
-  const router = useRouter();
   const [customers, setCustomers] = useState<UrgentCustomer[]>(initialCustomers);
   // 対応済みにした直後のID（緑フラッシュ用）
   const [doneIds, setDoneIds]     = useState<Set<number>>(new Set());
@@ -39,7 +38,7 @@ export default function UrgentCustomersPanel({ initialCustomers }: Props) {
       const res = await fetch(`/api/customers/${id}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ next_action: getTomorrow() }),
+        body:    JSON.stringify({ next_action: getNextActionDate() }),
       });
       if (!res.ok) throw new Error("更新に失敗しました");
 

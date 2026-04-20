@@ -50,9 +50,10 @@ function buildReminderMessage(name: string): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as {
-      customer_id:   number;
-      type:          "upsell" | "reminder";
+      customer_id:  number;
+      type:         "upsell" | "reminder";
       upsell_price?: number;
+      product_id?:  string;
     };
 
     const { customer_id, type, upsell_price = UPSELL_DEFAULT_PRICE } = body;
@@ -118,6 +119,18 @@ export async function POST(req: NextRequest) {
         direction: "outbound",
         text:      `[アップセル送信] ¥${upsell_price.toLocaleString()} オファー`,
         raw_type:  "upsell",
+      });
+
+      // 購入ログ（後で分析に使う）。失敗しても本処理を止めない。
+      void Promise.resolve().then(async () => {
+        try {
+          await supabase.from("purchase_logs").insert({
+            customer_id:  String(customer_id),
+            product_id:   body.product_id ?? "unknown",
+            price:        upsell_price,
+            purchased_at: new Date().toISOString(),
+          });
+        } catch { /* ログ失敗は無視 */ }
       });
     } else {
       // リマインドもメッセージ履歴に残す

@@ -68,6 +68,22 @@ function initSchema(db: Database.Database): void {
       created_at    TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS upsell_logs (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id    TEXT    NOT NULL,
+      product_id     TEXT    NOT NULL,
+      customer_type  TEXT    NOT NULL,
+      customer_state TEXT    NOT NULL,
+      temperature    TEXT    NOT NULL,
+      created_at     TEXT    NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS purchase_logs (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id  TEXT    NOT NULL,
+      product_id   TEXT    NOT NULL,
+      price        INTEGER NOT NULL,
+      purchased_at TEXT    NOT NULL
+    );
   `);
 }
 

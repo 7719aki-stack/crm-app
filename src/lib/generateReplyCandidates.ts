@@ -157,6 +157,31 @@ export interface CandidateContext {
   customerType?:  CustomerType;
   /** 顧客の現在の心理状態。デフォルト: "satisfied" */
   customerState?: CustomerState;
+  /** ログ記録用。省略時はスキップ */
+  customerId?:    string;
+}
+
+// ─── アップセル表示ログ ──────────────────────────────────────
+type UpsellLog = {
+  customer_id:    string
+  product_id:     string
+  customer_type:  string
+  customer_state: string
+  temperature:    string
+  created_at:     string
+}
+
+// サーバーサイドのみ実行。クライアントでは即return。失敗しても本処理に影響させない。
+function logUpsell(log: UpsellLog): void {
+  if (typeof window !== "undefined") return
+  Promise.resolve().then(async () => {
+    try {
+      const { supabase } = await import("./db")
+      await supabase.from("upsell_logs").insert(log)
+    } catch {
+      // ログ失敗は無視
+    }
+  })
 }
 
 // ── 温度感ごとの書き出しオープナー ───────────────────────────
@@ -431,9 +456,27 @@ function selectUpsellProduct(ctx: CandidateContext): Product {
 }
 
 export function buildUpsellMessage(ctx: CandidateContext): string {
+  const {
+    customerId,
+    customerType  = "emotional",
+    customerState = "satisfied",
+    temperature   = "cool",
+  } = ctx
+
   const product    = selectUpsellProduct(ctx)
   const needPhrase = buildNeedPhrase(ctx)
   const priceStr   = product.price.toLocaleString("ja-JP")
+
+  if (customerId) {
+    logUpsell({
+      customer_id:    customerId,
+      product_id:     product.id,
+      customer_type:  customerType,
+      customer_state: customerState,
+      temperature,
+      created_at:     new Date().toISOString(),
+    })
+  }
 
   return [
     "今回の流れを見ると、",

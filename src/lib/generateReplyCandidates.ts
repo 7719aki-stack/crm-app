@@ -168,6 +168,7 @@ type UpsellLog = {
   customer_type:  string
   customer_state: string
   temperature:    string
+  variant_id:     string
   created_at:     string
 }
 
@@ -566,6 +567,115 @@ function selectUpsellProduct(ctx: CandidateContext): Product {
   return candidates[0]
 }
 
+// ─── A/Bテスト: バリアント定義 ──────────────────────────────
+// 各商品につき A（論理型）/ B（共感型）/ C（緊急性型）の3パターン。
+// 変わるのは「最後の誘導フレーズ」のみ。商品名・URLは共通。
+
+type UpsellVariant = {
+  id:     "A" | "B" | "C"
+  phrase: string   // specificPhrase の代わりに使う
+}
+
+const VARIANT_MAP: Record<string, UpsellVariant[]> = {
+  action_plan: [
+    { id: "A", phrase: "どこで動くか、何を送るか、タイミングまで整理したい場合は" },
+    { id: "B", phrase: "気持ちの整理と次の一手をまとめて確認したい場合は" },
+    { id: "C", phrase: "このタイミングを逃す前に、動き方を固めておきたい場合は" },
+  ],
+  psyche_analysis: [
+    { id: "A", phrase: "相手の本音や、表に出ていない気持ちまで見ておきたい場合は" },
+    { id: "B", phrase: "相手がどんな気持ちでいるか、そこから確認したい場合は" },
+    { id: "C", phrase: "今の状態が続く前に、相手の心の中を整理しておく必要がある場合は" },
+  ],
+  reverse_program: [
+    { id: "A", phrase: "ここから関係を立て直す流れまで整理したい場合は" },
+    { id: "B", phrase: "関係が修復できるかどうか、一緒に確認していきたい場合は" },
+    { id: "C", phrase: "このまま距離が広がる前に、動き出す流れを作りたい場合は" },
+  ],
+  full_program: [
+    { id: "A", phrase: "今の状況をまとめて、最短で進める形まで固めたい場合は" },
+    { id: "B", phrase: "全体像を一緒に整理して、安心して動ける状態にしたい場合は" },
+    { id: "C", phrase: "今の流れを逃さないために、全部まとめて動く準備をするなら" },
+  ],
+}
+
+// ── バリアント別CV集計 ────────────────────────────────────────
+export interface UpsellVariantStat {
+  product_id:     string
+  variant_id:     string
+  upsell_count:   number
+  purchase_count: number
+  cv_rate:        number
+  is_reliable:    boolean
+}
+
+const VARIANT_MIN_COUNT = 5
+
+/**
+ * upsell_logs × purchase_logs を product_id + variant_id で集計して返す。
+ * SQL:
+ *   SELECT product_id, variant_id,
+ *          COUNT(u.id) AS upsell_count, COUNT(p.id) AS purchase_count,
+ *          COUNT(p.id)*1.0/COUNT(u.id) AS cv_rate
+ *   FROM upsell_logs u
+ *   LEFT JOIN purchase_logs p ON u.customer_id=p.customer_id AND u.product_id=p.product_id
+ *   GROUP BY u.product_id, u.variant_id
+ *   ORDER BY cv_rate DESC
+ */
+export function getVariantCVStats(): UpsellVariantStat[] {
+  if (typeof window !== "undefined") return []
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getDb } = require("./db") as { getDb: () => { prepare: (sql: string) => { all: () => Record<string, unknown>[] } } }
+    const rows = getDb().prepare(`
+      SELECT
+        u.product_id,
+        u.variant_id,
+        COUNT(u.id)                      AS upsell_count,
+        COUNT(p.id)                      AS purchase_count,
+        COUNT(p.id) * 1.0 / COUNT(u.id) AS cv_rate
+      FROM upsell_logs u
+      LEFT JOIN purchase_logs p
+        ON  u.customer_id = p.customer_id
+        AND u.product_id  = p.product_id
+      GROUP BY u.product_id, u.variant_id
+      ORDER BY cv_rate DESC
+    `).all()
+    return rows.map((row) => ({
+      product_id:     String(row.product_id),
+      variant_id:     String(row.variant_id),
+      upsell_count:   Number(row.upsell_count),
+      purchase_count: Number(row.purchase_count),
+      cv_rate:        Number(row.cv_rate),
+      is_reliable:    Number(row.upsell_count) >= VARIANT_MIN_COUNT,
+    }))
+  } catch {
+    return []
+  }
+}
+
+// ── バリアント選択 ────────────────────────────────────────────
+// 1. product のバリアント統計を取得
+// 2. is_reliable=true で cv_rate 最高のバリアントを採用
+// 3. データ不足（count < 5）の場合はランダム
+function selectUpsellVariant(productId: string): UpsellVariant {
+  const allVariants = VARIANT_MAP[productId] ?? VARIANT_MAP.action_plan
+  const stats = getVariantCVStats()
+  const reliable = stats.filter((s) => s.product_id === productId && s.is_reliable)
+
+  if (reliable.length > 0) {
+    const best = reliable[0] // すでに cv_rate DESC ソート済み
+    const variant = allVariants.find((v) => v.id === best.variant_id) ?? allVariants[0]
+    console.log(`Upsell variant selected: ${variant.id} (cv=${best.cv_rate.toFixed(3)})`)
+    return variant
+  }
+
+  // ランダムフォールバック
+  const variant = allVariants[Math.floor(Math.random() * allVariants.length)]
+  console.log(`Upsell variant selected: ${variant.id} (random fallback)`)
+  return variant
+}
+
 // 商品IDごとに「最後の誘導フレーズ」を返す
 function buildProductSpecificPhrase(productId: string): string {
   switch (productId) {
@@ -590,10 +700,10 @@ export function buildUpsellMessage(ctx: CandidateContext): string {
     temperature   = "cool",
   } = ctx
 
-  const product       = selectUpsellProduct(ctx)
-  const needPhrase    = buildNeedPhrase(ctx)
-  const specificPhrase = buildProductSpecificPhrase(product.id)
-  const priceStr      = product.price.toLocaleString("ja-JP")
+  const product    = selectUpsellProduct(ctx)
+  const variant    = selectUpsellVariant(product.id)
+  const needPhrase = buildNeedPhrase(ctx)
+  const priceStr   = product.price.toLocaleString("ja-JP")
 
   if (customerId) {
     logUpsell({
@@ -602,6 +712,7 @@ export function buildUpsellMessage(ctx: CandidateContext): string {
       customer_type:  customerType,
       customer_state: customerState,
       temperature,
+      variant_id:     variant.id,
       created_at:     new Date().toISOString(),
     })
   }
@@ -616,7 +727,7 @@ export function buildUpsellMessage(ctx: CandidateContext): string {
     "今の状態だと",
     needPhrase,
     "",
-    specificPhrase,
+    variant.phrase,
     "",
     `${product.name}（¥${priceStr}）`,
     product.url,

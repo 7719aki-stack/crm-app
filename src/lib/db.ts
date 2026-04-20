@@ -75,6 +75,7 @@ function initSchema(db: Database.Database): void {
       customer_type  TEXT    NOT NULL,
       customer_state TEXT    NOT NULL,
       temperature    TEXT    NOT NULL,
+      variant_id     TEXT    NOT NULL DEFAULT 'A',
       created_at     TEXT    NOT NULL
     );
     CREATE TABLE IF NOT EXISTS purchase_logs (
@@ -85,6 +86,9 @@ function initSchema(db: Database.Database): void {
       purchased_at TEXT    NOT NULL
     );
   `);
+
+  // 既存テーブルへのカラム追加マイグレーション（SQLite は IF NOT EXISTS 非対応のため try/catch）
+  try { db.exec(`ALTER TABLE upsell_logs ADD COLUMN variant_id TEXT NOT NULL DEFAULT 'A'`) } catch { /* already exists */ }
 }
 
 // ─── 型 ──────────────────────────────────────────────────────────────────────

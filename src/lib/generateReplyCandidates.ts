@@ -582,6 +582,92 @@ export function buildUpsellMessage(ctx: CandidateContext): string {
   ].join("\n")
 }
 
+// ─── アップセル条件別CV集計 ───────────────────────────────────────────────────
+// customer_type / customer_state / temperature / product_id の4軸で成約傾向を集計する。
+//
+// 用途（将来の活用イメージ）:
+//   - customerType 別: emotional / analytical など、どのタイプが最もCV率が高いかを特定
+//     → 優先フォローターゲットの選定に使う
+//   - customerState 別: anxious / deciding など、どの状態で提案すると成約しやすいか
+//     → 提案タイミングの最適化・アップセル挿入フェーズの調整
+//   - temperature 別: hot / warm / cool / cold で成約率がどう変わるか
+//     → 温度感ごとの商品選定ロジック強化に使う
+//   - product_id 別: どの商品がどの条件で売れているかの組み合わせを把握
+//     → selectUpsellProduct の候補スコアリングに組み込み予定
+
+export interface UpsellSegmentStat {
+  customer_type:  string
+  customer_state: string
+  temperature:    string
+  product_id:     string
+  upsell_count:   number
+  purchase_count: number
+  cv_rate:        number
+  /** upsell_count が SEGMENT_MIN_COUNT 未満の場合は参考値扱い */
+  is_reliable:    boolean
+}
+
+const SEGMENT_MIN_COUNT = 5
+
+/**
+ * upsell_logs × purchase_logs を4軸で集計してセグメント別CV率を返す。
+ *
+ * SQL:
+ *   SELECT customer_type, customer_state, temperature, product_id,
+ *          COUNT(u.id) AS upsell_count,
+ *          COUNT(p.id) AS purchase_count,
+ *          COUNT(p.id)*1.0/COUNT(u.id) AS cv_rate
+ *   FROM upsell_logs u
+ *   LEFT JOIN purchase_logs p
+ *     ON u.customer_id = p.customer_id AND u.product_id = p.product_id
+ *   GROUP BY customer_type, customer_state, temperature, product_id
+ *   ORDER BY cv_rate DESC
+ *
+ * クライアントサイドでは常に [] を返す（better-sqlite3 は Node.js 専用）。
+ * upsell_count < 5 の行は is_reliable=false として返し、呼び出し側で除外可能。
+ */
+export function getUpsellSegmentStats(): UpsellSegmentStat[] {
+  if (typeof window !== "undefined") return []
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getDb } = require("./db") as { getDb: () => { prepare: (sql: string) => { all: () => Record<string, unknown>[] } } }
+    const rows = getDb().prepare(`
+      SELECT
+        u.customer_type,
+        u.customer_state,
+        u.temperature,
+        u.product_id,
+        COUNT(u.id)                      AS upsell_count,
+        COUNT(p.id)                      AS purchase_count,
+        COUNT(p.id) * 1.0 / COUNT(u.id) AS cv_rate
+      FROM upsell_logs u
+      LEFT JOIN purchase_logs p
+        ON  u.customer_id = p.customer_id
+        AND u.product_id  = p.product_id
+      GROUP BY
+        u.customer_type,
+        u.customer_state,
+        u.temperature,
+        u.product_id
+      ORDER BY cv_rate DESC
+    `).all()
+
+    return rows.map((row) => ({
+      customer_type:  String(row.customer_type),
+      customer_state: String(row.customer_state),
+      temperature:    String(row.temperature),
+      product_id:     String(row.product_id),
+      upsell_count:   Number(row.upsell_count),
+      purchase_count: Number(row.purchase_count),
+      cv_rate:        Number(row.cv_rate),
+      is_reliable:    Number(row.upsell_count) >= SEGMENT_MIN_COUNT,
+    }))
+  } catch {
+    return []
+  }
+}
+
 export function generateContextualCandidates(ctx: CandidateContext): string[] {
   const {
     name, tags, category, temperature, recentMessages,

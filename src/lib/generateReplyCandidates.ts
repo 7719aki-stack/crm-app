@@ -116,8 +116,10 @@ export function generateReplyCandidates(
 }
 
 // ─── 文脈考慮型 返信候補生成 ──────────────────────────────────
-// tags + name + category + temperature + 直近メッセージを使って
-// 3件の返信候補を生成する。既存 generateReplyCandidates より文脈に近い。
+// tags + name + category + temperature + intent + 直近メッセージを使って
+// ①共感 → ②質問 → ③次アクション の3件を生成する。
+
+export type ReplyIntent = "build_trust" | "get_reply" | "invite" | "close";
 
 export interface CandidateContext {
   name:           string;
@@ -125,9 +127,11 @@ export interface CandidateContext {
   category:       string;
   temperature:    string;
   recentMessages: Array<{ direction: string; text: string }>;
+  /** 会話の目的。デフォルト: "get_reply" */
+  intent?:        ReplyIntent;
 }
 
-// 温度感ごとの書き出しトーン
+// ── 温度感ごとの書き出しオープナー ───────────────────────────
 const TEMP_OPENER: Record<string, string> = {
   hot:  "今の気持ち、しっかり受け取りました。",
   warm: "お話聞かせてくれてありがとうございます。",
@@ -135,32 +139,72 @@ const TEMP_OPENER: Record<string, string> = {
   cold: "連絡くれて嬉しいです。",
 };
 
-// タグ別の悩みキーワード（文中に差し込む）
+// ── タグ別の悩みキーワード ────────────────────────────────────
 const TOPIC_PHRASE: Record<string, string> = {
-  "復縁":         "復縁のこと",
-  "片思い・進展": "相手への気持ち",
-  "不倫・複雑愛": "複雑な状況",
+  "復縁":           "復縁のこと",
+  "片思い・進展":   "相手への気持ち",
+  "不倫・複雑愛":   "複雑な状況",
   "人間関係・仕事": "今の状況",
-  "金運・開運":   "流れのこと",
+  "金運・開運":     "流れのこと",
 };
 
-// カテゴリ別の締め文
+// ── カテゴリ別の締め文 ────────────────────────────────────────
 const CATEGORY_CLOSE: Record<string, string> = {
-  "片思い":     "一緒に考えていきましょうね。",
-  "復縁":       "焦らず、一歩ずつ進みましょう。",
-  "不倫":       "慎重に、でも正直に向き合いましょう。",
-  "夫婦問題":   "大切な関係だからこそ、丁寧に見ていきますね。",
+  "片思い":         "一緒に考えていきましょうね。",
+  "復縁":           "焦らず、一歩ずつ進みましょう。",
+  "不倫":           "慎重に、でも正直に向き合いましょう。",
+  "夫婦問題":       "大切な関係だからこそ、丁寧に見ていきますね。",
   "仕事・人間関係": "まず状況を整理しながら進めていきましょう。",
-  "金運":       "流れを整えるところから始めてみましょう。",
+  "金運":           "流れを整えるところから始めてみましょう。",
 };
+
+// ── intent × temperature で質問文を切り替える ────────────────
+function buildQuestion(intent: ReplyIntent, san: string, topic: string, temp: string): string {
+  const isWarm = temp === "hot" || temp === "warm";
+  switch (intent) {
+    case "build_trust":
+      // 共感重視 → 圧を与えない柔らかい問いかけ
+      return isWarm
+        ? `${san}のペースで、\nもう少し話してみてもらえますか？`
+        : `急がなくていいので、\n気になることがあれば教えてくださいね。`;
+    case "get_reply":
+      // 返信率重視 → 答えやすい具体的な質問
+      return isWarm
+        ? `${san}の状況をもう少し教えてもらえますか？\n具体的に一緒に考えていきたいので。`
+        : `もう少し詳しく教えてもらえると、\n${san}に合ったアドバイスができます。`;
+    case "invite":
+      // 軽い誘導 → 重くせず次のステップを示す
+      return isWarm
+        ? `もし気になるなら、\n鑑定でもっと詳しく見ることもできますよ。`
+        : `よかったら、\n続きをもう少し話してみてください。`;
+    case "close":
+      // 締め → 余韻を残して終わる問いかけ
+      return `また気になることがあれば、\nいつでも声をかけてくださいね。`;
+  }
+}
+
+// ── intent ごとの③次アクション文 ────────────────────────────
+function buildNextAction(intent: ReplyIntent, san: string, topic: string, close: string): string {
+  switch (intent) {
+    case "build_trust":
+      return `${san}のこと、\nしっかり受け止めながら一緒に考えていきます。\n${close}`;
+    case "get_reply":
+      return `${topic}については、\n焦らず丁寧に見ていきましょう。\n${close}`;
+    case "invite":
+      return `もし鑑定を受けてみたいと思ったら、\n気軽に言ってくださいね。\n${close}`;
+    case "close":
+      return `今日は話してくれてありがとうございます。\n${san}のこと、応援しています。`;
+  }
+}
 
 export function generateContextualCandidates(ctx: CandidateContext): string[] {
-  const { name, tags, category, temperature, recentMessages } = ctx;
+  const { name, tags, category, temperature, recentMessages, intent = "get_reply" } = ctx;
 
-  const san      = name ? `${name}さん` : "あなた";
-  const opener   = TEMP_OPENER[temperature] ?? TEMP_OPENER.cool;
+  const san    = name ? `${name}さん` : "あなた";
+  const opener = TEMP_OPENER[temperature] ?? TEMP_OPENER.cool;
+  const close  = CATEGORY_CLOSE[category] ?? "一緒に考えていきましょうね。";
 
-  // 優先タグを解決
+  // 優先タグからトピックフレーズを解決
   let topicPhrase = "今の気持ち";
   for (const pt of PRIORITY_ORDER) {
     const canonical = resolveTag(pt);
@@ -171,30 +215,26 @@ export function generateContextualCandidates(ctx: CandidateContext): string[] {
     }
   }
 
-  const close = CATEGORY_CLOSE[category] ?? "一緒に考えていきましょうね。";
-
-  // 直近の受信メッセージ（顧客からの最後のメッセージ）を取得
+  // 直近の受信メッセージを取得（顧客発信の最新1件）
   const lastInbound = [...recentMessages]
     .reverse()
     .find((m) => m.direction === "inbound");
-
-  // 最後のメッセージから短いキーフレーズを抽出（先頭20文字）
   const lastSnippet = lastInbound?.text
     ? lastInbound.text.replace(/\n/g, " ").slice(0, 20)
     : null;
 
-  // ── 候補1: 受け止め + 名前付きで共感 ──────────────────────
+  // ── ①共感: intent に関わらず受け止め・安心感を出す ──────────
   const candidate1 = lastSnippet
     ? `${opener}\n${san}の「${lastSnippet}…」という気持ち、\nちゃんと受け止めています。`
-    : `${opener}\n${san}の${topicPhrase}、\nしっかり向き合わせてもらいますね。`;
+    : intent === "build_trust"
+      ? `${opener}\n${san}のこと、\nしっかり向き合わせてもらいますね。`
+      : `${opener}\n${san}の${topicPhrase}、\nしっかり向き合わせてもらいますね。`;
 
-  // ── 候補2: 深掘り促し（温度感が高いほど積極的に）──────────
-  const candidate2 = temperature === "hot" || temperature === "warm"
-    ? `${san}の状況をもう少し詳しく教えてもらえますか？\nより具体的に一緒に考えていきたいので。`
-    : `もう少し教えてもらえると、\n${san}に合ったアドバイスができると思います。`;
+  // ── ②質問: intent × temperature で返信しやすい問いを生成 ────
+  const candidate2 = buildQuestion(intent, san, topicPhrase, temperature);
 
-  // ── 候補3: 前向きな締め + カテゴリ別クロージング ──────────
-  const candidate3 = `${topicPhrase}については、\n焦らず丁寧に見ていきましょう。\n${close}`;
+  // ── ③次アクション: intent ごとに方向を変える ────────────────
+  const candidate3 = buildNextAction(intent, san, topicPhrase, close);
 
   return [candidate1, candidate2, candidate3];
 }

@@ -502,6 +502,42 @@ function getProductCVMap(): Record<string, number> {
   return map
 }
 
+// セグメントCVで最高商品を探す。マッチ条件を段階的に緩めて探索する。
+// 優先順: type+state+temp → type+state → typeのみ → null（fallback）
+function selectBySegmentCV(
+  stats: UpsellSegmentStat[],
+  customerType: string,
+  customerState: string,
+  temperature: string,
+): Product | null {
+  const reliable = stats.filter((s) => s.is_reliable)
+
+  const matchers = [
+    (s: UpsellSegmentStat) =>
+      s.customer_type === customerType &&
+      s.customer_state === customerState &&
+      s.temperature === temperature,
+    (s: UpsellSegmentStat) =>
+      s.customer_type === customerType &&
+      s.customer_state === customerState,
+    (s: UpsellSegmentStat) =>
+      s.customer_type === customerType,
+  ]
+
+  for (const match of matchers) {
+    const hits = reliable.filter(match).sort((a, b) => b.cv_rate - a.cv_rate)
+    if (hits.length > 0) {
+      const product = PRODUCTS[hits[0].product_id] ?? Object.values(PRODUCTS).find((p) => p.id === hits[0].product_id)
+      if (product) {
+        console.log("Upsell selected by segment:", hits[0].product_id, `(cv=${hits[0].cv_rate.toFixed(3)})`)
+        return product
+      }
+    }
+  }
+
+  return null
+}
+
 function selectUpsellProduct(ctx: CandidateContext): Product {
   const {
     tags          = [],
@@ -510,7 +546,12 @@ function selectUpsellProduct(ctx: CandidateContext): Product {
     temperature   = "cool",
   } = ctx
 
-  // 文脈に基づいて候補を積み上げる（複数可）
+  // ① セグメントCVで選定（type+state+temp → type+state → typeのみ）
+  const stats = getUpsellSegmentStats()
+  const segmentProduct = selectBySegmentCV(stats, customerType, customerState, temperature)
+  if (segmentProduct) return segmentProduct
+
+  // ② fallback: 文脈ベース候補 × 全体CV順
   const candidates: Product[] = []
 
   if (tags.some((t) => resolveTag(t) === "不倫・複雑愛")) candidates.push(PRODUCTS.reverse)
@@ -519,9 +560,9 @@ function selectUpsellProduct(ctx: CandidateContext): Product {
   if (temperature   === "cold")      candidates.push(PRODUCTS.psyche)
   if (candidates.length === 0)       candidates.push(PRODUCTS.action)
 
-  // CV高い順に並べて先頭を返す
   const cvMap = getProductCVMap()
   candidates.sort((a, b) => (cvMap[b.id] ?? 0) - (cvMap[a.id] ?? 0))
+  console.log("Upsell selected by fallback:", candidates[0].id)
   return candidates[0]
 }
 

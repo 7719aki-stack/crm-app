@@ -128,6 +128,14 @@ export type CustomerType =
   | "decisive"     // 背中を押してほしい・決断重視
   | "hesitant";    // 迷いが強い・不安が大きい
 
+/**
+ * 顧客の現在の心理状態（アップセル精度向上用）
+ * - satisfied : 鑑定直後の満足・納得感が高い状態
+ * - anxious   : 不安が再燃・次の一手が見えていない状態
+ * - deciding  : 背中を押せば決断できる状態
+ */
+export type CustomerState = "satisfied" | "anxious" | "deciding";
+
 /** 会話フェーズ */
 export type ConversationPhase =
   | "initial"      // 初回〜関係構築中
@@ -147,6 +155,8 @@ export interface CandidateContext {
   phase?:         ConversationPhase;
   /** 顧客タイプ。デフォルト: "emotional" */
   customerType?:  CustomerType;
+  /** 顧客の現在の心理状態。デフォルト: "satisfied" */
+  customerState?: CustomerState;
 }
 
 // ── 温度感ごとの書き出しオープナー ───────────────────────────
@@ -216,84 +226,119 @@ function buildNextAction(intent: ReplyIntent, san: string, topic: string, close:
 }
 
 // ─── アップセルロジック（phase = "upsell" 専用）─────────────
-// customerType × タグで最適な商品を1つ選び、4候補を組み立てる。
+// customerType × customerState × タグで商品を選定。
 // intentロジックとは独立して動作する。
+// 「おすすめ」禁止・「必要になる流れ」を作る文体で統一。
 
 interface UpsellProduct {
-  name:   string;
-  appeal: string; // 顧客タイプ別のアピール軸
+  name:        string;
+  needPhrase:  string; // 「〜が必要になってくる」流れを作るフレーズ
 }
 
-// customerType ごとのアピール文言
-const TYPE_APPEAL: Record<CustomerType, string> = {
-  emotional:  "気持ちがもっと楽になる",
-  analytical: "状況をより深く整理できる",
-  decisive:   "次の一手が明確になる",
-  hesitant:   "不安をひとつひとつ解消できる",
+// ── CustomerState × CustomerType → needPhrase ────────────────
+// 「必要になる流れ」を自然に作るフレーズ（タイプ × 状態で変わる）
+const NEED_PHRASE: Record<CustomerState, Record<CustomerType, string>> = {
+  satisfied: {
+    emotional:  "この気持ちが続くうちに、次の段階を固めておくと安心です",
+    analytical: "今の整理ができているうちに、もう一段深く見ておくと確実です",
+    decisive:   "方向が見えてきたこのタイミングで、具体的な動き方を決めておくといいです",
+    hesitant:   "少し気持ちが落ち着いてきたなら、次の準備を始めるのに良い時期です",
+  },
+  anxious: {
+    emotional:  "また不安が出てきたということは、もう少し深いところを見る必要があるかもしれません",
+    analytical: "状況が変わってきているなら、あらためて整理し直す必要が出てきます",
+    decisive:   "迷いが出てきたということは、まだ決め切れていない部分があるということです",
+    hesitant:   "不安が続くなら、根本から向き合うことが次のステップになってきます",
+  },
+  deciding: {
+    emotional:  "気持ちの準備ができてきたなら、あとは動き出すための後押しだけです",
+    analytical: "判断材料が揃ってきたなら、最後の確認をしておくと動きやすくなります",
+    decisive:   "決める気持ちがあるなら、あとはタイミングと方法を合わせるだけです",
+    hesitant:   "ここまで来たなら、あと一歩だけ確認しておくと後悔しないと思います",
+  },
 };
 
-// タグ × customerType → おすすめ商品名のマップ
-// 優先タグ（PRIORITY_ORDER準拠）ごとに、タイプで推薦商品を変える
-const PRODUCT_MAP: Record<string, Record<CustomerType, string>> = {
+// ── タグ × customerType × customerState → 商品名 ─────────────
+// PRODUCT_MAP[タグ][customerType][customerState] で一意に決まる
+type ProductByStateMap = Record<CustomerType, Record<CustomerState, string>>;
+
+const PRODUCT_MAP: Record<string, ProductByStateMap> = {
   "復縁": {
-    emotional:  "復縁完全逆転プラン",
-    analytical: "関係性診断＋戦略セッション",
-    decisive:   "復縁アクションプラン",
-    hesitant:   "ステップ別 復縁サポート",
+    emotional:  { satisfied: "復縁 感情整理 深層セッション", anxious: "復縁 不安解消 集中鑑定",    deciding: "復縁 決断サポート プラン"   },
+    analytical: { satisfied: "関係性診断＋次のステップ分析", anxious: "状況再分析＋戦略セッション", deciding: "復縁 行動計画 個別設計"       },
+    decisive:   { satisfied: "復縁 完全逆転プラン",          anxious: "復縁 再アプローチ戦略",      deciding: "復縁 即実行 アクションプラン" },
+    hesitant:   { satisfied: "ステップ別 復縁サポート",      anxious: "復縁 丁寧ケア 個別鑑定",    deciding: "復縁 背中押し セッション"    },
   },
   "片思い・進展": {
-    emotional:  "恋愛成就 集中鑑定",
-    analytical: "相手の本音 深層分析",
-    decisive:   "アプローチ戦略 個別プラン",
-    hesitant:   "不安解消 丁寧サポート鑑定",
+    emotional:  { satisfied: "恋愛成就 感情強化セッション",  anxious: "片思い 不安解消 集中鑑定",   deciding: "想いを伝えるタイミング鑑定"  },
+    analytical: { satisfied: "相手の本音 深層分析",          anxious: "関係性の再分析セッション",   deciding: "アプローチ戦略 精密設計"     },
+    decisive:   { satisfied: "アプローチ 即実行プラン",      anxious: "片思い 立て直し集中鑑定",    deciding: "告白タイミング 個別プラン"   },
+    hesitant:   { satisfied: "片思い 丁寧サポート鑑定",      anxious: "不安解消 じっくり個別相談",  deciding: "背中を押す 恋愛セッション"   },
   },
   "不倫・複雑愛": {
-    emotional:  "複雑愛 感情整理セッション",
-    analytical: "状況分析＋選択肢整理",
-    decisive:   "決断サポート 集中鑑定",
-    hesitant:   "じっくり向き合う個別相談",
+    emotional:  { satisfied: "複雑愛 感情整理セッション",    anxious: "不倫 不安ケア 集中鑑定",     deciding: "関係の方向性 決断鑑定"       },
+    analytical: { satisfied: "状況分析＋選択肢整理",          anxious: "状況変化 再分析セッション",  deciding: "今後の動き方 戦略設計"       },
+    decisive:   { satisfied: "決断サポート 集中鑑定",         anxious: "複雑愛 再アプローチ戦略",    deciding: "決断 即実行プラン"           },
+    hesitant:   { satisfied: "じっくり向き合う個別相談",      anxious: "不安解消 慎重サポート鑑定",  deciding: "一歩踏み出す 背中押しセッション" },
   },
   "人間関係・仕事": {
-    emotional:  "人間関係 改善サポート",
-    analytical: "環境分析＋方向性整理",
-    decisive:   "行動計画 個別プラン",
-    hesitant:   "ストレス解消 丁寧鑑定",
+    emotional:  { satisfied: "人間関係 改善サポートセッション", anxious: "職場不安 解消 集中鑑定",   deciding: "人間関係 動き方 決断鑑定"   },
+    analytical: { satisfied: "環境分析＋方向性整理",            anxious: "状況再分析＋対策セッション", deciding: "行動計画 精密設計"          },
+    decisive:   { satisfied: "行動計画 即実行プラン",           anxious: "立て直し 戦略セッション",   deciding: "職場改善 決断プラン"        },
+    hesitant:   { satisfied: "ストレス解消 丁寧鑑定",           anxious: "不安解消 じっくりサポート", deciding: "一歩踏み出す 個別セッション" },
   },
   "金運・開運": {
-    emotional:  "運気好転 集中セッション",
-    analytical: "流れ分析＋タイミング診断",
-    decisive:   "開運アクションプラン",
-    hesitant:   "不安解消 流れ整理鑑定",
+    emotional:  { satisfied: "運気好転 感情強化セッション",  anxious: "金運低迷 不安解消鑑定",      deciding: "開運 タイミング決断鑑定"     },
+    analytical: { satisfied: "流れ分析＋タイミング診断",     anxious: "状況再分析＋流れ整理",       deciding: "開運 行動計画 精密設計"      },
+    decisive:   { satisfied: "開運 即実行アクションプラン",  anxious: "金運 立て直し戦略",          deciding: "開運 決断サポートプラン"     },
+    hesitant:   { satisfied: "不安解消 流れ整理鑑定",        anxious: "金運不安 じっくりケア鑑定",  deciding: "背中を押す 開運セッション"   },
   },
 };
 
 // デフォルト商品（タグ不一致時）
-const DEFAULT_PRODUCT: Record<CustomerType, string> = {
-  emotional:  "深層心理 特別鑑定",
-  analytical: "総合分析 集中セッション",
-  decisive:   "個別戦略プラン",
-  hesitant:   "じっくり丁寧 個別サポート",
+const DEFAULT_PRODUCT: Record<CustomerType, Record<CustomerState, string>> = {
+  emotional:  { satisfied: "深層心理 特別鑑定",       anxious: "感情整理 集中セッション",   deciding: "決断サポート 個別鑑定"     },
+  analytical: { satisfied: "総合分析 集中セッション", anxious: "状況再分析 戦略セッション", deciding: "行動計画 精密設計"         },
+  decisive:   { satisfied: "個別戦略プラン",          anxious: "立て直し 戦略セッション",   deciding: "即実行 決断プラン"         },
+  hesitant:   { satisfied: "じっくり丁寧 個別サポート", anxious: "不安解消 丁寧ケア鑑定", deciding: "背中押し 個別セッション"   },
 };
 
 function resolveUpsellProduct(
   tags: string[],
   customerType: CustomerType,
+  customerState: CustomerState,
 ): UpsellProduct {
   for (const pt of PRIORITY_ORDER) {
     const canonical = resolveTag(pt);
     const hit = tags.some((t) => resolveTag(t) === canonical || t === pt);
     if (hit && PRODUCT_MAP[canonical]) {
       return {
-        name:   PRODUCT_MAP[canonical][customerType],
-        appeal: TYPE_APPEAL[customerType],
+        name:       PRODUCT_MAP[canonical][customerType][customerState],
+        needPhrase: NEED_PHRASE[customerState][customerType],
       };
     }
   }
   return {
-    name:   DEFAULT_PRODUCT[customerType],
-    appeal: TYPE_APPEAL[customerType],
+    name:       DEFAULT_PRODUCT[customerType][customerState],
+    needPhrase: NEED_PHRASE[customerState][customerType],
   };
 }
+
+// ── CustomerState 別の①共感オープナー ────────────────────────
+const STATE_EMPATHY: Record<CustomerState, (san: string, snippet: string | null, topic: string, opener: string) => string> = {
+  satisfied: (san, snippet, topic, opener) =>
+    snippet
+      ? `${opener}\n「${snippet}…」\nそこまで整理できてきたんですね。`
+      : `${opener}\n${san}の${topic}、ここまで向き合えてきたのが伝わります。`,
+  anxious: (san, snippet, _topic, opener) =>
+    snippet
+      ? `${opener}\n「${snippet}…」\nまた不安が出てきているんですね。`
+      : `${opener}\n${san}の気持ち、また揺れてきているのが伝わります。`,
+  deciding: (san, snippet, topic, opener) =>
+    snippet
+      ? `${opener}\n「${snippet}…」\n動き出す気持ちが出てきているんですね。`
+      : `${opener}\n${san}の${topic}、そろそろ次の段階が見えてきた感じがします。`,
+};
 
 function buildUpsellCandidates(
   san: string,
@@ -301,23 +346,22 @@ function buildUpsellCandidates(
   topicPhrase: string,
   lastSnippet: string | null,
   customerType: CustomerType,
+  customerState: CustomerState,
   tags: string[],
 ): string[] {
-  const product = resolveUpsellProduct(tags, customerType);
+  const product = resolveUpsellProduct(tags, customerType, customerState);
 
-  // ①共感: 鑑定後の気持ちを受け止める
-  const c1 = lastSnippet
-    ? `${opener}\n「${lastSnippet}…」\nそのお気持ち、よく伝わりました。`
-    : `${opener}\n${san}の${topicPhrase}、しっかり受け取りましたよ。`;
+  // ①共感: customerState 別に受け止め方を変える
+  const c1 = STATE_EMPATHY[customerState](san, lastSnippet, topicPhrase, opener);
 
-  // ②状態整理: 今どういう状況かを言語化してあげる
-  const c2 = `鑑定を通じて、${san}の状況が\nだいぶ整理できてきましたね。\n${product.appeal}と思います。`;
+  // ②状態整理: 現在地を言語化・「必要になる流れ」の起点を作る
+  const c2 = `鑑定を通じて状況が見えてきたと思いますが、\n${product.needPhrase}。`;
 
-  // ③続きの余地: 押し付けず次への橋渡し
-  const c3 = `もし${topicPhrase}についてもっと深く見たいと感じたら、\n続きを一緒に考えることもできますよ。`;
+  // ③続きの余地: 押し付けず「自然にそうなる」感覚で橋渡し
+  const c3 = `${topicPhrase}をもう一段深く見ていくなら、\n今がちょうどそのタイミングだと思います。`;
 
-  // ④商品提案: 1つだけ・自然なトーンで
-  const c4 = `${san}に今おすすめしたいのは\n「${product.name}」です。\n${product.appeal}ので、\nよかったら検討してみてください。`;
+  // ④商品提案: 「〜という人が次に進む先」として自然に提示
+  const c4 = `そういう流れで、「${product.name}」に\n進む方が多いです。\nよかったら、どんな内容か聞いてみてください。`;
 
   return [c1, c2, c3, c4];
 }
@@ -325,9 +369,10 @@ function buildUpsellCandidates(
 export function generateContextualCandidates(ctx: CandidateContext): string[] {
   const {
     name, tags, category, temperature, recentMessages,
-    intent = "get_reply",
-    phase  = "initial",
-    customerType = "emotional",
+    intent        = "get_reply",
+    phase         = "initial",
+    customerType  = "emotional",
+    customerState = "satisfied",
   } = ctx;
 
   const san    = name ? `${name}さん` : "あなた";
@@ -355,7 +400,7 @@ export function generateContextualCandidates(ctx: CandidateContext): string[] {
 
   // ── phase = "upsell": intentロジックを迂回して商品提案フローへ ─
   if (phase === "upsell") {
-    return buildUpsellCandidates(san, opener, topicPhrase, lastSnippet, customerType, tags);
+    return buildUpsellCandidates(san, opener, topicPhrase, lastSnippet, customerType, customerState, tags);
   }
 
   // ── ①共感: intent に関わらず受け止め・安心感を出す ──────────

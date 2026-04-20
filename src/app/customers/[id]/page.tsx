@@ -26,7 +26,7 @@ import {
   getCustomerMessageDraft,
   saveCustomerMessageDraft,
 } from "@/lib/messageDraft";
-import { getProduct, loadPricePresets, type OfferProduct } from "@/lib/products";
+import { getProduct, loadPricePresets, PRODUCTS, type OfferProduct, type ProductId } from "@/lib/products";
 import type { StatusId } from "@/lib/statuses";
 import type {
   CustomerDetail,
@@ -186,6 +186,15 @@ export default function CustomerDetailPage() {
   const [aiError,        setAiError]        = useState<string | null>(null);
   const [lineTone,       setLineTone]       = useState("共感");
   const [pricePresets,   setPricePresets]   = useState<OfferProduct[]>([]);
+
+  // ── 売上追加フォーム ────────────────────────────────────
+  const [saleType,       setSaleType]       = useState<ProductId>("paid_divination");
+  const [saleAmount,     setSaleAmount]     = useState("");
+  const [salePaid,       setSalePaid]       = useState(true);
+  const [saleNotes,      setSaleNotes]      = useState("");
+  const [addingSale,     setAddingSale]     = useState(false);
+  const [saleError,      setSaleError]      = useState<string | null>(null);
+  const [showSaleForm,   setShowSaleForm]   = useState(false);
 
   /** 返信候補・オファー文などの「明示的な注入」。
    *  ユーザーが未編集の場合のみ LineSendPanel にも反映する */
@@ -399,6 +408,41 @@ export default function CustomerDetailPage() {
     set_line_user_id(line_user_id_draft);
     setEditLineId(false);
     setSavingLineId(false);
+  }
+
+  // ── 売上追加 ─────────────────────────────────────────────
+  async function addSale() {
+    const price = Number(saleAmount);
+    if (!saleAmount || isNaN(price) || price < 0) {
+      setSaleError("金額を正しく入力してください");
+      return;
+    }
+    setAddingSale(true);
+    setSaleError(null);
+    try {
+      const res = await fetch("/api/appraisals", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer_id: customerId,
+          type:        saleType,
+          price,
+          paid:        salePaid ? 1 : 0,
+          notes:       saleNotes || null,
+        }),
+      });
+      if (!res.ok) throw new Error("登録に失敗しました");
+      // 顧客データを再取得して purchases と total_amount を更新
+      const updated: CustomerDetail = await fetch(`/api/customers/${customerId}`).then((r) => r.json());
+      setCustomer(updated);
+      setSaleAmount("");
+      setSaleNotes("");
+      setShowSaleForm(false);
+    } catch (e) {
+      setSaleError(e instanceof Error ? e.message : "エラーが発生しました");
+    } finally {
+      setAddingSale(false);
+    }
   }
 
   // ── 返信候補（安定した参照を保つことで ReplyCandidatesPanel の自動選択が正しく動く）
@@ -1020,15 +1064,84 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* ── 購入履歴（全幅） ────────────────────────── */}
-      {customer.purchases.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-800">購入履歴</h3>
-            <span className="text-xs text-gray-400">
-              合計 <span className="text-brand-600 font-semibold">¥{customer.total_amount.toLocaleString()}</span>
-            </span>
+      {/* ── 売上・購入履歴（全幅） ──────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-800">売上 / 購入履歴</h3>
+          <div className="flex items-center gap-3">
+            {customer.total_amount > 0 && (
+              <span className="text-xs text-gray-400">
+                LTV <span className="text-brand-600 font-semibold">¥{customer.total_amount.toLocaleString()}</span>
+              </span>
+            )}
+            <button
+              onClick={() => { setShowSaleForm((v) => !v); setSaleError(null); }}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors"
+            >
+              {showSaleForm ? "キャンセル" : "+ 売上を追加"}
+            </button>
           </div>
+        </div>
+
+        {/* 売上追加フォーム */}
+        {showSaleForm && (
+          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/60">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-1 min-w-[140px]">
+                <label className="text-[11px] font-semibold text-gray-500">メニュー</label>
+                <select
+                  value={saleType}
+                  onChange={(e) => setSaleType(e.target.value as ProductId)}
+                  className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-brand-300"
+                >
+                  {PRODUCTS.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1 w-28">
+                <label className="text-[11px] font-semibold text-gray-500">金額（円）</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={saleAmount}
+                  onChange={(e) => setSaleAmount(e.target.value)}
+                  placeholder="9800"
+                  className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-brand-300"
+                />
+              </div>
+              <div className="flex flex-col gap-1 flex-1 min-w-[120px]">
+                <label className="text-[11px] font-semibold text-gray-500">メモ（任意）</label>
+                <input
+                  type="text"
+                  value={saleNotes}
+                  onChange={(e) => setSaleNotes(e.target.value)}
+                  placeholder="補足メモ"
+                  className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-brand-300"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer pb-1.5">
+                <input
+                  type="checkbox"
+                  checked={salePaid}
+                  onChange={(e) => setSalePaid(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-500"
+                />
+                支払済
+              </label>
+              <button
+                onClick={addSale}
+                disabled={addingSale || !saleAmount}
+                className="text-sm font-semibold px-4 py-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors pb-1.5"
+              >
+                {addingSale ? "保存中…" : "保存"}
+              </button>
+            </div>
+            {saleError && <p className="mt-2 text-xs text-red-600">{saleError}</p>}
+          </div>
+        )}
+
+        {customer.purchases.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -1047,8 +1160,10 @@ export default function CustomerDetailPage() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="px-5 py-6 text-sm text-gray-400 text-center">まだ売上記録がありません</p>
+        )}
+      </div>
     </div>
   );
 }

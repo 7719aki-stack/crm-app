@@ -237,10 +237,21 @@ function TagFilterPanel({
 }
 
 // ─── メインコンポーネント ──────────────────────────────
+type ActionFilter = "all" | "overdue";
+
+// next_action 昇順ソート（期限超過が先頭、null は最後）
+function sortByNextAction(a: CustomerRow, b: CustomerRow): number {
+  if (!a.next_action && !b.next_action) return 0;
+  if (!a.next_action) return 1;
+  if (!b.next_action) return -1;
+  return new Date(a.next_action).getTime() - new Date(b.next_action).getTime();
+}
+
 export function CustomerList() {
   const [customers,    setCustomers]    = useState<CustomerRow[]>([]);
   const [tagGroups,    setTagGroups]    = useState<TagGroup[]>([]);
   const [filterGroup,  setFilterGroup]  = useState<GroupFilter>("all");
+  const [actionFilter, setActionFilter] = useState<ActionFilter>("all");
   const [searchText,   setSearchText]   = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [loading,      setLoading]      = useState(true);
@@ -272,20 +283,30 @@ export function CustomerList() {
     );
   }
 
-  const filtered = customers.filter((c) => {
-    if (filterGroup !== "all" && getStatus(c.status)?.group !== filterGroup) return false;
-    if (selectedTags.length > 0 && !selectedTags.every((t) => c.tags.includes(t))) return false;
-    if (searchText.trim()) {
-      const q = searchText.toLowerCase();
-      return (
-        c.name.toLowerCase().includes(q) ||
-        c.display_name.toLowerCase().includes(q) ||
-        c.category.toLowerCase().includes(q) ||
-        c.tags.some((t) => t.toLowerCase().includes(q))
-      );
-    }
-    return true;
-  });
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const isOverdue = (c: CustomerRow) =>
+    !!c.next_action && new Date(c.next_action) < todayStart;
+
+  const filtered = customers
+    .filter((c) => {
+      if (filterGroup !== "all" && getStatus(c.status)?.group !== filterGroup) return false;
+      if (actionFilter === "overdue" && !isOverdue(c)) return false;
+      if (selectedTags.length > 0 && !selectedTags.every((t) => c.tags.includes(t))) return false;
+      if (searchText.trim()) {
+        const q = searchText.toLowerCase();
+        return (
+          c.name.toLowerCase().includes(q) ||
+          c.display_name.toLowerCase().includes(q) ||
+          c.category.toLowerCase().includes(q) ||
+          c.tags.some((t) => t.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    })
+    .sort(sortByNextAction);
+
+  const overdueCount = customers.filter(isOverdue).length;
 
   return (
     <div>
@@ -347,6 +368,40 @@ export function CustomerList() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* 要対応フィルター */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">次回アクション:</span>
+        <button
+          onClick={() => setActionFilter("all")}
+          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all ${
+            actionFilter === "all"
+              ? "bg-gray-900 text-white"
+              : "bg-white text-gray-500 border border-gray-200 hover:border-gray-300"
+          }`}
+        >
+          全て
+        </button>
+        <button
+          onClick={() => setActionFilter("overdue")}
+          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all ${
+            actionFilter === "overdue"
+              ? "bg-red-600 text-white"
+              : "bg-white text-red-600 border border-red-200 hover:bg-red-50"
+          }`}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+          要対応のみ
+          {overdueCount > 0 && (
+            <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+              actionFilter === "overdue" ? "bg-red-400 text-white" : "bg-red-100 text-red-700"
+            }`}>
+              {overdueCount}
+            </span>
+          )}
+        </button>
+        <span className="text-[11px] text-gray-400 ml-1">（次回アクション日が近い順に並び替え）</span>
       </div>
 
       {/* タグ絞り込みパネル */}

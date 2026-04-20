@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { supabase, getDb } from "@/lib/db";
+import UrgentCustomersPanel from "@/components/dashboard/UrgentCustomersPanel";
 import { getSalesSummary } from "@/lib/getSalesSummary";
 import { detectABAnomaly } from "@/lib/abTest";
 import { getStatus } from "@/lib/statuses";
@@ -692,58 +693,7 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {urgentCustomers.length === 0 ? (
-          <div className="px-5 py-8 text-center">
-            <p className="text-sm text-gray-300">対応が必要な顧客はいません</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {urgentCustomers.map((c) => {
-              const isOverdue = c.next_action !== null && c.next_action <= new Date().toISOString().slice(0, 10);
-              const isNull    = c.next_action === null;
-              return (
-                <div key={c.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/60 transition-colors">
-                  {/* アバター */}
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    isOverdue ? "bg-red-100" : "bg-gray-100"
-                  }`}>
-                    <span className={`text-xs font-bold ${isOverdue ? "text-red-600" : "text-gray-500"}`}>
-                      {(c.name || "?")[0]}
-                    </span>
-                  </div>
-
-                  {/* 顧客名 */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{c.name}</p>
-                  </div>
-
-                  {/* next_action 日付 */}
-                  <div className="flex-shrink-0">
-                    {isNull ? (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200">
-                        未設定
-                      </span>
-                    ) : isOverdue ? (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 font-medium">
-                        ⚠ {c.next_action}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-500">{c.next_action}</span>
-                    )}
-                  </div>
-
-                  {/* 詳細リンク */}
-                  <Link
-                    href={`/customers/${c.id}`}
-                    className="flex-shrink-0 text-xs font-medium text-brand-600 border border-brand-200 px-3 py-1.5 rounded-lg hover:bg-brand-50 transition-colors"
-                  >
-                    詳細へ →
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <UrgentCustomersPanel initialCustomers={urgentCustomers} />
       </div>
 
       {/* ── 2カラム：ファネル概況 + 最近の購入 ────────── */}

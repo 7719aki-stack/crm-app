@@ -144,20 +144,19 @@ export default async function DashboardPage() {
   // 有料購入済人数: appraisals.paid=1 のユニーク顧客数（status 非依存）
   // paidCustomerCount は getSalesSummary() で取得済み
 
+  // ① 期限切れ → ② temperature 高い → ③ ID降順（新規登録優先）
+  const TEMP_SCORE: Record<string, number> = { hot: 3, warm: 2, cool: 1, cold: 0 };
   const priorityCustomers: CustomerRow[] = customers
-    .filter((c) => {
-      if (getStatus(c.status)?.group === "exit") return false;
-      const overdue  = c.next_action && new Date(c.next_action) <= tomorrow;
-      const highRisk = c.crisis_level >= 4;
-      return overdue || highRisk;
-    })
+    .filter((c) => getStatus(c.status)?.group !== "exit")
     .sort((a, b) => {
-      const aOverdue = a.next_action && new Date(a.next_action) < today;
-      const bOverdue = b.next_action && new Date(b.next_action) < today;
-      if (aOverdue && !bOverdue) return -1;
-      if (!aOverdue && bOverdue) return  1;
-      return b.crisis_level - a.crisis_level;
-    });
+      const aOverdue = !!a.next_action && new Date(a.next_action) < today;
+      const bOverdue = !!b.next_action && new Date(b.next_action) < today;
+      if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+      const tDiff = (TEMP_SCORE[b.temperature] ?? 0) - (TEMP_SCORE[a.temperature] ?? 0);
+      if (tDiff !== 0) return tDiff;
+      return b.id - a.id;
+    })
+    .slice(0, 3);
 
   const funnelData = funnelGroups.map(({ group, label, dotCls }) => ({
     label,
@@ -539,7 +538,7 @@ export default async function DashboardPage() {
               {priorityCustomers.length}
             </span>
           )}
-          <p className="text-xs text-gray-400 ml-auto">危機度4以上 / 次回アクション期限</p>
+          <p className="text-xs text-gray-400 ml-auto">期限切れ → 温度感 → 新規登録 の順で上位3名</p>
         </div>
 
         {priorityCustomers.length === 0 ? (
@@ -584,7 +583,7 @@ export default async function DashboardPage() {
                   href={`/customers/${c.id}`}
                   className="flex-shrink-0 text-xs font-medium text-brand-600 border border-brand-200 px-3 py-1.5 rounded-lg hover:bg-brand-50 transition-colors"
                 >
-                  対応する →
+                  詳細へ →
                 </Link>
               </div>
             ))}

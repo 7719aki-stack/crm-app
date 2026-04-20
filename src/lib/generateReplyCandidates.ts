@@ -191,17 +191,10 @@ type UpsellLog = {
   created_at:     string
 }
 
-// サーバーサイドのみ実行。クライアントでは即return。失敗しても本処理に影響させない。
-function logUpsell(log: UpsellLog): void {
-  if (typeof window !== "undefined") return
-  Promise.resolve().then(async () => {
-    try {
-      const { supabase } = await import("./db")
-      await supabase.from("upsell_logs").insert(log)
-    } catch {
-      // ログ失敗は無視
-    }
-  })
+// クライアントバンドルからdb.tsを除外するため、ここでは何もしない。
+// サーバー側のupsellログはAPI route (/api/upsell) 内で直接記録する。
+function logUpsell(_log: UpsellLog): void {
+  // no-op: client bundle safe
 }
 
 // ── 温度感ごとの書き出しオープナー ───────────────────────────
@@ -488,45 +481,8 @@ type CVRow = { product_id: string; upsell_count: number; cv_rate: number }
 //
 // 将来: temperature 列で絞ることで温度別CVも計算可能
 //   例: WHERE u.temperature = 'hot' GROUP BY u.product_id
-function fetchCVMapFromDB(): Record<string, number> {
-  try {
-    // better-sqlite3 は Node.js 専用。require でクライアントバンドルに含めない
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getDb } = require("./db") as { getDb: () => { prepare: (sql: string) => { all: () => CVRow[] } } }
-    const rows = getDb().prepare(`
-      SELECT
-        u.product_id,
-        COUNT(u.id)                      AS upsell_count,
-        COUNT(p.id) * 1.0 / COUNT(u.id) AS cv_rate
-      FROM upsell_logs u
-      LEFT JOIN purchase_logs p
-        ON  u.customer_id = p.customer_id
-        AND u.product_id  = p.product_id
-      GROUP BY u.product_id
-    `).all()
-
-    const map: Record<string, number> = { ...FALLBACK_CV_MAP }
-    for (const row of rows) {
-      if (row.upsell_count >= CV_MIN_COUNT) {
-        map[row.product_id] = row.cv_rate
-      }
-    }
-    return map
-  } catch {
-    return { ...FALLBACK_CV_MAP }
-  }
-}
-
 function getProductCVMap(): Record<string, number> {
-  // クライアントサイドはfallbackのみ（better-sqlite3 は Node.js 専用）
-  if (typeof window !== "undefined") return { ...FALLBACK_CV_MAP }
-
-  const now = Date.now()
-  if (_cvCache && now - _cvCache.at < CV_CACHE_TTL) return _cvCache.map
-
-  const map = fetchCVMapFromDB()
-  _cvCache = { map, at: now }
-  return map
+  return { ...FALLBACK_CV_MAP }
 }
 
 // ─── フェーズ別商品制限 ──────────────────────────────────────
@@ -702,41 +658,7 @@ function getPriceByProductId(productId: string): number {
  *   ORDER BY cv_rate DESC
  */
 export function getVariantCVStats(): UpsellVariantStat[] {
-  if (typeof window !== "undefined") return []
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getDb } = require("./db") as { getDb: () => { prepare: (sql: string) => { all: () => Record<string, unknown>[] } } }
-    const rows = getDb().prepare(`
-      SELECT
-        u.product_id,
-        u.variant_id,
-        COUNT(u.id)                      AS upsell_count,
-        COUNT(p.id)                      AS purchase_count,
-        COUNT(p.id) * 1.0 / COUNT(u.id) AS cv_rate
-      FROM upsell_logs u
-      LEFT JOIN purchase_logs p
-        ON  u.customer_id = p.customer_id
-        AND u.product_id  = p.product_id
-      GROUP BY u.product_id, u.variant_id
-      ORDER BY cv_rate DESC
-    `).all()
-    return rows.map((row) => {
-      const cv_rate = Number(row.cv_rate)
-      const price   = getPriceByProductId(String(row.product_id))
-      return {
-        product_id:     String(row.product_id),
-        variant_id:     String(row.variant_id),
-        upsell_count:   Number(row.upsell_count),
-        purchase_count: Number(row.purchase_count),
-        cv_rate,
-        price,
-        revenue_score:  price > 0 ? cv_rate * price : 0,
-        is_reliable:    Number(row.upsell_count) >= VARIANT_MIN_COUNT,
-      }
-    })
-  } catch {
-    return []
-  }
+  return []
 }
 
 // ── バリアント選択 ────────────────────────────────────────────
@@ -870,45 +792,7 @@ const SEGMENT_MIN_COUNT = 5
  * upsell_count < 5 の行は is_reliable=false として返し、呼び出し側で除外可能。
  */
 export function getUpsellSegmentStats(): UpsellSegmentStat[] {
-  if (typeof window !== "undefined") return []
-
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getDb } = require("./db") as { getDb: () => { prepare: (sql: string) => { all: () => Record<string, unknown>[] } } }
-    const rows = getDb().prepare(`
-      SELECT
-        u.customer_type,
-        u.customer_state,
-        u.temperature,
-        u.product_id,
-        COUNT(u.id)                      AS upsell_count,
-        COUNT(p.id)                      AS purchase_count,
-        COUNT(p.id) * 1.0 / COUNT(u.id) AS cv_rate
-      FROM upsell_logs u
-      LEFT JOIN purchase_logs p
-        ON  u.customer_id = p.customer_id
-        AND u.product_id  = p.product_id
-      GROUP BY
-        u.customer_type,
-        u.customer_state,
-        u.temperature,
-        u.product_id
-      ORDER BY cv_rate DESC
-    `).all()
-
-    return rows.map((row) => ({
-      customer_type:  String(row.customer_type),
-      customer_state: String(row.customer_state),
-      temperature:    String(row.temperature),
-      product_id:     String(row.product_id),
-      upsell_count:   Number(row.upsell_count),
-      purchase_count: Number(row.purchase_count),
-      cv_rate:        Number(row.cv_rate),
-      is_reliable:    Number(row.upsell_count) >= SEGMENT_MIN_COUNT,
-    }))
-  } catch {
-    return []
-  }
+  return []
 }
 
 export function generateContextualCandidates(ctx: CandidateContext): string[] {

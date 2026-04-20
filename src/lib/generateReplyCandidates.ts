@@ -440,6 +440,19 @@ function buildNeedPhrase(ctx: CandidateContext): string {
   return "次の動きを整理する段階に入っています"
 }
 
+// CV率マップ（初期値はダミー。後でDBクエリに差し替える）
+// SELECT product_id, COUNT(pl.product_id)*1.0/COUNT(ul.product_id) as cv
+// FROM upsell_logs ul LEFT JOIN purchase_logs pl USING(customer_id, product_id)
+// GROUP BY product_id
+function getProductCVMap(): Record<string, number> {
+  return {
+    action_plan:       0.12,
+    psyche_analysis:   0.18,
+    reverse_program:   0.09,
+    full_program:      0.22,
+  }
+}
+
 function selectUpsellProduct(ctx: CandidateContext): Product {
   const {
     tags          = [],
@@ -448,11 +461,19 @@ function selectUpsellProduct(ctx: CandidateContext): Product {
     temperature   = "cool",
   } = ctx
 
-  if (tags.some((t) => resolveTag(t) === "不倫・複雑愛")) return PRODUCTS.reverse
-  if (customerState === "anxious") return temperature === "hot" ? PRODUCTS.full : PRODUCTS.psyche
-  if (customerState === "deciding")                        return PRODUCTS.action
-  if (temperature   === "cold")                            return PRODUCTS.psyche
-  return PRODUCTS.action
+  // 文脈に基づいて候補を積み上げる（複数可）
+  const candidates: Product[] = []
+
+  if (tags.some((t) => resolveTag(t) === "不倫・複雑愛")) candidates.push(PRODUCTS.reverse)
+  if (customerState === "anxious") candidates.push(temperature === "hot" ? PRODUCTS.full : PRODUCTS.psyche)
+  if (customerState === "deciding")  candidates.push(PRODUCTS.action)
+  if (temperature   === "cold")      candidates.push(PRODUCTS.psyche)
+  if (candidates.length === 0)       candidates.push(PRODUCTS.action)
+
+  // CV高い順に並べて先頭を返す
+  const cvMap = getProductCVMap()
+  candidates.sort((a, b) => (cvMap[b.id] ?? 0) - (cvMap[a.id] ?? 0))
+  return candidates[0]
 }
 
 export function buildUpsellMessage(ctx: CandidateContext): string {

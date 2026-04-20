@@ -59,6 +59,7 @@ export default async function DashboardPage() {
 
   // ── 初期値（DB失敗時のフォールバック）──────────────────
   let salesKpi = { totalSales: 0, paidSales: 0, unpaidSales: 0, salesCount: 0 };
+  let urgentCustomers: { id: number; name: string; next_action: string | null }[] = [];
   let customers: CustomerRow[] = [];
   let monthRevenue      = 0;
   let monthPaidCount    = 0;
@@ -144,6 +145,19 @@ export default async function DashboardPage() {
         COUNT(*)                                                    AS salesCount
       FROM appraisals
     `).get() as typeof salesKpi;
+
+    urgentCustomers = db.prepare(`
+      SELECT
+        id,
+        name,
+        next_action
+      FROM customers
+      WHERE
+        next_action IS NULL
+        OR next_action <= date('now')
+      ORDER BY next_action ASC
+      LIMIT 5
+    `).all() as typeof urgentCustomers;
   } catch (e) {
     console.error("[DashboardPage] DB error:", e);
   }
@@ -663,6 +677,71 @@ export default async function DashboardPage() {
                 </Link>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── アクション期限切れ・未設定 ─────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-gray-50 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-800">要対応（期限切れ・未設定）</h3>
+          {urgentCustomers.length > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-red-500 text-white text-[10px] font-bold px-1.5">
+              {urgentCustomers.length}
+            </span>
+          )}
+        </div>
+
+        {urgentCustomers.length === 0 ? (
+          <div className="px-5 py-8 text-center">
+            <p className="text-sm text-gray-300">対応が必要な顧客はいません</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {urgentCustomers.map((c) => {
+              const isOverdue = c.next_action !== null && c.next_action <= new Date().toISOString().slice(0, 10);
+              const isNull    = c.next_action === null;
+              return (
+                <div key={c.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/60 transition-colors">
+                  {/* アバター */}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    isOverdue ? "bg-red-100" : "bg-gray-100"
+                  }`}>
+                    <span className={`text-xs font-bold ${isOverdue ? "text-red-600" : "text-gray-500"}`}>
+                      {(c.name || "?")[0]}
+                    </span>
+                  </div>
+
+                  {/* 顧客名 */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{c.name}</p>
+                  </div>
+
+                  {/* next_action 日付 */}
+                  <div className="flex-shrink-0">
+                    {isNull ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200">
+                        未設定
+                      </span>
+                    ) : isOverdue ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 font-medium">
+                        ⚠ {c.next_action}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-500">{c.next_action}</span>
+                    )}
+                  </div>
+
+                  {/* 詳細リンク */}
+                  <Link
+                    href={`/customers/${c.id}`}
+                    className="flex-shrink-0 text-xs font-medium text-brand-600 border border-brand-200 px-3 py-1.5 rounded-lg hover:bg-brand-50 transition-colors"
+                  >
+                    詳細へ →
+                  </Link>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

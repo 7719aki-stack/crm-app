@@ -440,17 +440,66 @@ function buildNeedPhrase(ctx: CandidateContext): string {
   return "次の動きを整理する段階に入っています"
 }
 
-// CV率マップ（初期値はダミー。後でDBクエリに差し替える）
-// SELECT product_id, COUNT(pl.product_id)*1.0/COUNT(ul.product_id) as cv
-// FROM upsell_logs ul LEFT JOIN purchase_logs pl USING(customer_id, product_id)
-// GROUP BY product_id
-function getProductCVMap(): Record<string, number> {
-  return {
-    action_plan:       0.12,
-    psyche_analysis:   0.18,
-    reverse_program:   0.09,
-    full_program:      0.22,
+// ── CV率キャッシュ ────────────────────────────────────────
+// fallback: データ件数が CV_MIN_COUNT 未満の商品はこの値を使う
+const FALLBACK_CV_MAP: Record<string, number> = {
+  action_plan:     0.12,
+  psyche_analysis: 0.18,
+  reverse_program: 0.09,
+  full_program:    0.22,
+}
+const CV_MIN_COUNT = 10              // 最低サンプル数
+const CV_CACHE_TTL = 5 * 60 * 1000  // 5分
+
+let _cvCache: { map: Record<string, number>; at: number } | null = null
+
+type CVRow = { product_id: string; upsell_count: number; cv_rate: number }
+
+// SQL:
+//   CV率 = 購入数 / 提案数
+//   upsell_logs に LEFT JOIN purchase_logs (customer_id + product_id) で集計
+//
+// 将来: temperature 列で絞ることで温度別CVも計算可能
+//   例: WHERE u.temperature = 'hot' GROUP BY u.product_id
+function fetchCVMapFromDB(): Record<string, number> {
+  try {
+    // better-sqlite3 は Node.js 専用。require でクライアントバンドルに含めない
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getDb } = require("./db") as { getDb: () => { prepare: (sql: string) => { all: () => CVRow[] } } }
+    const rows = getDb().prepare(`
+      SELECT
+        u.product_id,
+        COUNT(u.id)                      AS upsell_count,
+        COUNT(p.id) * 1.0 / COUNT(u.id) AS cv_rate
+      FROM upsell_logs u
+      LEFT JOIN purchase_logs p
+        ON  u.customer_id = p.customer_id
+        AND u.product_id  = p.product_id
+      GROUP BY u.product_id
+    `).all()
+
+    const map: Record<string, number> = { ...FALLBACK_CV_MAP }
+    for (const row of rows) {
+      if (row.upsell_count >= CV_MIN_COUNT) {
+        map[row.product_id] = row.cv_rate
+      }
+    }
+    return map
+  } catch {
+    return { ...FALLBACK_CV_MAP }
   }
+}
+
+function getProductCVMap(): Record<string, number> {
+  // クライアントサイドはfallbackのみ（better-sqlite3 は Node.js 専用）
+  if (typeof window !== "undefined") return { ...FALLBACK_CV_MAP }
+
+  const now = Date.now()
+  if (_cvCache && now - _cvCache.at < CV_CACHE_TTL) return _cvCache.map
+
+  const map = fetchCVMapFromDB()
+  _cvCache = { map, at: now }
+  return map
 }
 
 function selectUpsellProduct(ctx: CandidateContext): Product {

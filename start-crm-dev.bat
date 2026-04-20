@@ -70,23 +70,18 @@ if "!NGROK_URL!"=="" (
     exit /b 1
 )
 
-echo ============================================
-echo   LINE Webhook 設定情報
-echo ============================================
+REM --- Step 4: Auto-setup LINE webhook ---
+echo [4/4] LINE Webhook URLを自動取得中...
 echo.
-echo   公開URL:
-echo     !NGROK_URL!
+cd /d C:\crm\app
+npx tsx scripts/updateLineWebhook.ts
+if errorlevel 1 (
+    echo.
+    echo [WARN] スクリプト実行に失敗しました
+    echo   手動確認: http://127.0.0.1:4040
+    echo   Webhook URL: !NGROK_URL!/api/line/webhook
+)
 echo.
-echo   LINE Webhook URL (コピーして使用):
-echo     !NGROK_URL!/api/line/webhook
-echo.
-echo ============================================
-echo.
-echo LINE Developers Console でこのURLを設定:
-echo   https://developers.line.biz/console/
-echo   チャンネル設定 - Messaging API - Webhook URL
-echo.
-echo ※ ngrok を再起動するたびにURLが変わります
-echo ============================================
+echo ※ ngrok を再起動するたびに start-crm-dev.bat を再実行してください
 echo.
 pause

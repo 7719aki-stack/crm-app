@@ -451,6 +451,21 @@ export default function CustomerDetailPage() {
     [aiCandidates, tags]
   );
 
+  // ── 返信候補クリック即保存 ────────────────────────────────
+  async function handleSendDirect(text: string): Promise<void> {
+    const res = await fetch(`/api/customers/${customerId}/messages/local`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      throw new Error((json as { error?: string }).error ?? "保存に失敗しました");
+    }
+    const saved = await res.json() as import("@/app/api/customers/[id]/messages/route").DbMessage;
+    setDbMessages((prev) => [...prev, saved]);
+  }
+
   // ── 顧客フェーズ（CTA文言の切り替えに使う）
   const customerPhase = useMemo(
     () => resolvePhase({
@@ -994,6 +1009,7 @@ export default function CustomerDetailPage() {
               onSelect={(text) => setLineMessage(text)}
               onAppend={(text) => appendLineMessage(text)}
               salesStartIndex={aiCandidates ? undefined : replyCandidates.length - 1}
+              onSendDirect={handleSendDirect}
             />
           </SectionCard>
 

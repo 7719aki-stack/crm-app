@@ -2,14 +2,18 @@
 
 import { useState, useEffect, useRef } from "react";
 
+type SendStatus = "idle" | "sending" | "sent" | "error";
+
 type Props = {
   candidates: string[];
-  /** 全置き換え */
+  /** 全置き換え（送信文エリアへのセット） */
   onSelect?:  (text: string) => void;
   /** 末尾に追記 */
   onAppend?:  (text: string) => void;
   /** この index 以降のアイテムを「提案文」としてバッジ表示する */
   salesStartIndex?: number;
+  /** クリック即保存（messages/local を呼ぶ） */
+  onSendDirect?: (text: string) => Promise<void>;
 };
 
 /** 候補テキスト先頭の【ラベル】を抽出。なければ「候補 N」を返す */
@@ -18,11 +22,12 @@ function extractLabel(text: string, index: number): string {
   return match ? match[1] : `候補 ${index + 1}`;
 }
 
-export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, salesStartIndex }: Props) {
-  const [copiedIndex,    setCopiedIndex]    = useState<number | null>(null);
-  const [selectedIndex,  setSelectedIndex]  = useState<number | null>(null);
-  const [appendedIndex,  setAppendedIndex]  = useState<number | null>(null);
-  const [sendConfirmed,  setSendConfirmed]  = useState(false);
+export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, salesStartIndex, onSendDirect }: Props) {
+  const [copiedIndex,   setCopiedIndex]   = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [appendedIndex, setAppendedIndex] = useState<number | null>(null);
+  const [sendStatus,    setSendStatus]    = useState<SendStatus>("idle");
+  const [sendError,     setSendError]     = useState<string | null>(null);
 
   // onSelect を ref に同期して useEffect 内の stale closure を回避する
   const onSelectRef = useRef(onSelect);
@@ -32,7 +37,8 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
   useEffect(() => {
     setCopiedIndex(null);
     setAppendedIndex(null);
-    setSendConfirmed(false);
+    setSendStatus("idle");
+    setSendError(null);
     if (candidates.length > 0) {
       setSelectedIndex(0);
       onSelectRef.current?.(candidates[0]);
@@ -55,15 +61,34 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
     onSelect?.(text);
     setSelectedIndex(index);
     setAppendedIndex(null);
-    setSendConfirmed(false);
+    setSendStatus("idle");
+    setSendError(null);
   };
-
 
   const handleAppend = (text: string, index: number) => {
     onAppend?.(text);
     setAppendedIndex(index);
     setSelectedIndex(index);
     setTimeout(() => setAppendedIndex(null), 1500);
+  };
+
+  // メイン候補の「クリック即送信」ハンドラ
+  const handleSendDirect = async (text: string) => {
+    if (sendStatus === "sending") return;
+    // 送信文エリアにもセット
+    onSelect?.(text);
+    if (!onSendDirect) return;
+    setSendStatus("sending");
+    setSendError(null);
+    try {
+      await onSendDirect(text);
+      setSendStatus("sent");
+      setTimeout(() => setSendStatus("idle"), 3000);
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : "送信に失敗しました");
+      setSendStatus("error");
+      setTimeout(() => setSendStatus("idle"), 4000);
+    }
   };
 
   if (candidates.length === 0) return null;
@@ -77,6 +102,17 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
   const subCandidates = candidates
     .map((text, i) => ({ text, i }))
     .filter(({ i }) => i !== mainIndex);
+
+  // メイン送信ボタンのスタイルと文言
+  const directBtnCls = sendStatus === "sending"
+    ? "bg-gray-400 text-white cursor-not-allowed"
+    : sendStatus === "sent"
+    ? "bg-emerald-500 text-white"
+    : sendStatus === "error"
+    ? "bg-red-500 text-white"
+    : onSendDirect
+    ? "bg-green-600 text-white hover:bg-green-700 active:bg-green-800"
+    : "bg-green-600 text-white hover:bg-green-700 active:bg-green-800";
 
   return (
     <div className="space-y-3">
@@ -109,37 +145,44 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
 
         {/* ボタン群 */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* このまま送信 CTA */}
-          {onSelect && (
-            <button
-              onClick={() => {
-                onSelect(mainText);
-                setSendConfirmed(true);
-                setTimeout(() => setSendConfirmed(false), 2000);
-              }}
-              className={`inline-flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-lg transition-all ${
-                sendConfirmed
-                  ? "bg-green-500 text-white"
-                  : "bg-green-600 text-white hover:bg-green-700 active:bg-green-800"
-              }`}
-            >
-              {sendConfirmed ? (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  送信文に反映済み
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
-                  この内容で送信する（おすすめ）
-                </>
-              )}
-            </button>
-          )}
+
+          {/* ── クリック即送信 or テキストセット ── */}
+          <button
+            onClick={() => handleSendDirect(mainText)}
+            disabled={sendStatus === "sending"}
+            className={`inline-flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-lg transition-all ${directBtnCls}`}
+          >
+            {sendStatus === "sending" && (
+              <>
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                保存中…
+              </>
+            )}
+            {sendStatus === "sent" && (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                送信しました
+              </>
+            )}
+            {sendStatus === "error" && (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                失敗 — 再試行
+              </>
+            )}
+            {sendStatus === "idle" && (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+                {onSendDirect ? "この内容で送信する（おすすめ）" : "送信文にセット"}
+              </>
+            )}
+          </button>
 
           {onAppend && (
             <button
@@ -182,6 +225,11 @@ export default function ReplyCandidatesPanel({ candidates, onSelect, onAppend, s
             )}
           </button>
         </div>
+
+        {/* エラーメッセージ */}
+        {sendStatus === "error" && sendError && (
+          <p className="mt-2 text-xs text-red-600">{sendError}</p>
+        )}
       </div>
 
       {/* ── サブ候補（小さく・控えめ） ───────────────────── */}

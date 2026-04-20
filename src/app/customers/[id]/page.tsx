@@ -194,6 +194,7 @@ export default function CustomerDetailPage() {
   const [saleNotes,      setSaleNotes]      = useState("");
   const [addingSale,     setAddingSale]     = useState(false);
   const [saleError,      setSaleError]      = useState<string | null>(null);
+  const [saleSuccess,    setSaleSuccess]    = useState(false);
   const [showSaleForm,   setShowSaleForm]   = useState(false);
 
   /** 返信候補・オファー文などの「明示的な注入」。
@@ -437,7 +438,10 @@ export default function CustomerDetailPage() {
       setCustomer(updated);
       setSaleAmount("");
       setSaleNotes("");
+      setSalePaid(true);
       setShowSaleForm(false);
+      setSaleSuccess(true);
+      setTimeout(() => setSaleSuccess(false), 3000);
     } catch (e) {
       setSaleError(e instanceof Error ? e.message : "エラーが発生しました");
     } finally {
@@ -1082,13 +1086,18 @@ export default function CustomerDetailPage() {
         <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-800">売上 / 購入履歴</h3>
           <div className="flex items-center gap-3">
+            {saleSuccess && (
+              <span className="text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
+                ✓ 保存しました
+              </span>
+            )}
             {customer.total_amount > 0 && (
               <span className="text-xs text-gray-400">
                 LTV <span className="text-brand-600 font-semibold">¥{customer.total_amount.toLocaleString()}</span>
               </span>
             )}
             <button
-              onClick={() => { setShowSaleForm((v) => !v); setSaleError(null); }}
+              onClick={() => { setShowSaleForm((v) => !v); setSaleError(null); setSaleSuccess(false); }}
               className="text-xs font-medium px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors"
             >
               {showSaleForm ? "キャンセル" : "+ 売上を追加"}

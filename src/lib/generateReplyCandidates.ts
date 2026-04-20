@@ -606,13 +606,21 @@ export interface UpsellVariantStat {
   upsell_count:   number
   purchase_count: number
   cv_rate:        number
+  price:          number   // PRODUCTS マスタから取得
+  revenue_score:  number   // cv_rate * price（売上期待値）
   is_reliable:    boolean
 }
 
 const VARIANT_MIN_COUNT = 5
 
+// PRODUCTS から product_id（.id フィールド）で price を引く
+function getPriceByProductId(productId: string): number {
+  return Object.values(PRODUCTS).find((p) => p.id === productId)?.price ?? 0
+}
+
 /**
  * upsell_logs × purchase_logs を product_id + variant_id で集計して返す。
+ * revenue_score = cv_rate * price で売上期待値を算出。
  * SQL:
  *   SELECT product_id, variant_id,
  *          COUNT(u.id) AS upsell_count, COUNT(p.id) AS purchase_count,
@@ -641,14 +649,20 @@ export function getVariantCVStats(): UpsellVariantStat[] {
       GROUP BY u.product_id, u.variant_id
       ORDER BY cv_rate DESC
     `).all()
-    return rows.map((row) => ({
-      product_id:     String(row.product_id),
-      variant_id:     String(row.variant_id),
-      upsell_count:   Number(row.upsell_count),
-      purchase_count: Number(row.purchase_count),
-      cv_rate:        Number(row.cv_rate),
-      is_reliable:    Number(row.upsell_count) >= VARIANT_MIN_COUNT,
-    }))
+    return rows.map((row) => {
+      const cv_rate = Number(row.cv_rate)
+      const price   = getPriceByProductId(String(row.product_id))
+      return {
+        product_id:     String(row.product_id),
+        variant_id:     String(row.variant_id),
+        upsell_count:   Number(row.upsell_count),
+        purchase_count: Number(row.purchase_count),
+        cv_rate,
+        price,
+        revenue_score:  price > 0 ? cv_rate * price : 0,
+        is_reliable:    Number(row.upsell_count) >= VARIANT_MIN_COUNT,
+      }
+    })
   } catch {
     return []
   }
@@ -656,21 +670,27 @@ export function getVariantCVStats(): UpsellVariantStat[] {
 
 // ── バリアント選択 ────────────────────────────────────────────
 // 1. product のバリアント統計を取得
-// 2. is_reliable=true で cv_rate 最高のバリアントを採用
-// 3. データ不足（count < 5）の場合はランダム
+// 2. is_reliable=true（count≥5）かつ price が有効なものを revenue_score 降順でソート
+// 3. データ不足 / price=0 → ランダムフォールバック
 function selectUpsellVariant(productId: string): UpsellVariant {
   const allVariants = VARIANT_MAP[productId] ?? VARIANT_MAP.action_plan
   const stats = getVariantCVStats()
-  const reliable = stats.filter((s) => s.product_id === productId && s.is_reliable)
+
+  const reliable = stats
+    .filter((s) => s.product_id === productId && s.is_reliable && s.price > 0)
+    .sort((a, b) => b.revenue_score - a.revenue_score)
 
   if (reliable.length > 0) {
-    const best = reliable[0] // すでに cv_rate DESC ソート済み
+    const best    = reliable[0]
     const variant = allVariants.find((v) => v.id === best.variant_id) ?? allVariants[0]
-    console.log(`Upsell variant selected: ${variant.id} (cv=${best.cv_rate.toFixed(3)})`)
+    console.log(
+      `Upsell selected by revenue: product=${best.product_id} variant=${variant.id}` +
+      ` cv=${best.cv_rate.toFixed(3)} price=${best.price} revenue=${Math.round(best.revenue_score)}`
+    )
     return variant
   }
 
-  // ランダムフォールバック
+  // ランダムフォールバック（データ不足）
   const variant = allVariants[Math.floor(Math.random() * allVariants.length)]
   console.log(`Upsell variant selected: ${variant.id} (random fallback)`)
   return variant

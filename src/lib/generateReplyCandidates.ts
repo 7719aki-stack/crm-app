@@ -366,6 +366,85 @@ function buildUpsellCandidates(
   return [c1, c2, c3, c4];
 }
 
+// ─── 商品マスタ ──────────────────────────────────────────────
+type Product = {
+  id:    string
+  name:  string
+  price: number
+  url:   string
+}
+
+const PRODUCTS: Record<string, Product> = {
+  main: {
+    id:    "deep_love",
+    name:  "深層恋愛鑑定",
+    price: 5000,
+    url:   "（設定画面のURLを貼り付けてください）",
+  },
+  action: {
+    id:    "action_plan",
+    name:  "恋愛行動アクション設計",
+    price: 9800,
+    url:   "（決済URLを貼り付けてください）",
+  },
+  psyche: {
+    id:    "psyche_analysis",
+    name:  "深層心理完全解析",
+    price: 19800,
+    url:   "（決済URLを貼り付けてください）",
+  },
+  reverse: {
+    id:    "reverse_program",
+    name:  "逆転再接近プログラム",
+    price: 29800,
+    url:   "（決済URLを貼り付けてください）",
+  },
+  full: {
+    id:    "full_program",
+    name:  "完全逆転プログラム",
+    price: 49800,
+    url:   "（決済URLを貼り付けてください）",
+  },
+}
+
+// 優先順位: 複雑恋愛タグ → 不安再燃 → 依存/不安タイプ → 行動型×決断直前 → デフォルト
+function selectUpsellProduct(
+  tags: string[],
+  customerType: CustomerType,
+  customerState: CustomerState,
+): Product {
+  if (tags.some((t) => resolveTag(t) === "不倫・複雑愛")) return PRODUCTS.reverse
+  if (customerState === "anxious")                         return PRODUCTS.full
+  if (customerType  === "hesitant")                        return PRODUCTS.psyche
+  if (customerType  === "decisive" && customerState === "deciding") return PRODUCTS.action
+  return PRODUCTS.action
+}
+
+export function buildUpsellMessage(ctx: CandidateContext): string {
+  const {
+    tags,
+    customerType  = "emotional",
+    customerState = "satisfied",
+  } = ctx
+
+  const product = selectUpsellProduct(tags, customerType, customerState)
+  const priceStr = product.price.toLocaleString("ja-JP")
+
+  return [
+    "今回の流れを見ると、",
+    "ここから先が一番重要な分岐になります。",
+    "",
+    "このまま様子を見るか、",
+    "一歩踏み込むかで結果が変わるタイミングです。",
+    "",
+    "もし今の状況に合わせて",
+    "具体的な動きまで整理したい場合は、",
+    "",
+    `${product.name}（¥${priceStr}）`,
+    product.url,
+  ].join("\n")
+}
+
 export function generateContextualCandidates(ctx: CandidateContext): string[] {
   const {
     name, tags, category, temperature, recentMessages,
@@ -398,9 +477,9 @@ export function generateContextualCandidates(ctx: CandidateContext): string[] {
     ? lastInbound.text.replace(/\n/g, " ").slice(0, 20)
     : null;
 
-  // ── phase = "upsell": intentロジックを迂回して商品提案フローへ ─
+  // ── phase = "upsell": intentロジックを迂回して決済リンク付き提案文へ ─
   if (phase === "upsell") {
-    return buildUpsellCandidates(san, opener, topicPhrase, lastSnippet, customerType, customerState, tags);
+    return [buildUpsellMessage(ctx)];
   }
 
   // ── ①共感: intent に関わらず受け止め・安心感を出す ──────────

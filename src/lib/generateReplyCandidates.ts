@@ -476,6 +476,22 @@ function selectUpsellProduct(ctx: CandidateContext): Product {
   return candidates[0]
 }
 
+// 商品IDごとに「最後の誘導フレーズ」を返す
+function buildProductSpecificPhrase(productId: string): string {
+  switch (productId) {
+    case "action_plan":
+      return "どこで動くか、何を送るか、タイミングまで整理したい場合は"
+    case "psyche_analysis":
+      return "相手の本音や、表に出ていない気持ちまで見ておきたい場合は"
+    case "reverse_program":
+      return "ここから関係を立て直す流れまで整理したい場合は"
+    case "full_program":
+      return "今の状況をまとめて、最短で進める形まで固めたい場合は"
+    default:
+      return "もしここまで整理しておきたい場合は"
+  }
+}
+
 export function buildUpsellMessage(ctx: CandidateContext): string {
   const {
     customerId,
@@ -484,9 +500,10 @@ export function buildUpsellMessage(ctx: CandidateContext): string {
     temperature   = "cool",
   } = ctx
 
-  const product    = selectUpsellProduct(ctx)
-  const needPhrase = buildNeedPhrase(ctx)
-  const priceStr   = product.price.toLocaleString("ja-JP")
+  const product       = selectUpsellProduct(ctx)
+  const needPhrase    = buildNeedPhrase(ctx)
+  const specificPhrase = buildProductSpecificPhrase(product.id)
+  const priceStr      = product.price.toLocaleString("ja-JP")
 
   if (customerId) {
     logUpsell({
@@ -506,10 +523,10 @@ export function buildUpsellMessage(ctx: CandidateContext): string {
     "ここで動くかどうかで、",
     "正直かなり結果変わります。",
     "",
-    `今の状態だと`,
+    "今の状態だと",
     needPhrase,
     "",
-    "もしここまで整理しておきたいなら、",
+    specificPhrase,
     "",
     `${product.name}（¥${priceStr}）`,
     product.url,

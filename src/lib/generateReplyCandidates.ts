@@ -143,6 +143,23 @@ export type ConversationPhase =
   | "upsell"       // 鑑定後・アップセルタイミング
   | "followup";    // フォローアップ
 
+/**
+ * 顧客の購買進行フェーズ（提案できる商品を制限するために使う）
+ * 無料 → メイン（¥5,000）→ アップセル → 上位継続 の順で進む
+ *
+ * - free_done    : 無料鑑定後・メイン未購入 → main 商品のみ提案
+ * - main_pending : メイン鑑定を提案すべき段階 → main 商品のみ提案
+ * - main_done    : メイン購入済み → アップセル4商品を提案
+ * - upsell_stage : アップセル提案が適切な段階 → アップセル4商品を提案
+ * - high_ticket  : 上位商品購入済み → 高単価アップセルのみ（action_plan除外）
+ */
+export type CustomerPhase =
+  | "free_done"
+  | "main_pending"
+  | "main_done"
+  | "upsell_stage"
+  | "high_ticket";
+
 export interface CandidateContext {
   name:           string;
   tags:           string[];
@@ -157,6 +174,8 @@ export interface CandidateContext {
   customerType?:  CustomerType;
   /** 顧客の現在の心理状態。デフォルト: "satisfied" */
   customerState?: CustomerState;
+  /** 購買進行フェーズ。省略時は upsell_stage 相当（後方互換） */
+  customerPhase?: CustomerPhase;
   /** ログ記録用。省略時はスキップ */
   customerId?:    string;
 }
@@ -398,6 +417,8 @@ type Product = {
   name:  string
   price: number
   url:   string
+  /** "main" = 無料後の最初の有料商品。"upsell" = メイン購入後に提案する商品 */
+  kind:  "main" | "upsell"
 }
 
 const PRODUCTS: Record<string, Product> = {
@@ -406,30 +427,35 @@ const PRODUCTS: Record<string, Product> = {
     name:  "深層恋愛鑑定",
     price: 5000,
     url:   "（設定画面のURLを貼り付けてください）",
+    kind:  "main",
   },
   action: {
     id:    "action_plan",
     name:  "恋愛行動アクション設計",
     price: 9800,
     url:   "（決済URLを貼り付けてください）",
+    kind:  "upsell",
   },
   psyche: {
     id:    "psyche_analysis",
     name:  "深層心理完全解析",
     price: 19800,
     url:   "（決済URLを貼り付けてください）",
+    kind:  "upsell",
   },
   reverse: {
     id:    "reverse_program",
     name:  "逆転再接近プログラム",
     price: 29800,
     url:   "（決済URLを貼り付けてください）",
+    kind:  "upsell",
   },
   full: {
     id:    "full_program",
     name:  "完全逆転プログラム",
     price: 49800,
     url:   "（決済URLを貼り付けてください）",
+    kind:  "upsell",
   },
 }
 
@@ -503,15 +529,39 @@ function getProductCVMap(): Record<string, number> {
   return map
 }
 
-// セグメントCVで最高商品を探す。マッチ条件を段階的に緩めて探索する。
+// ─── フェーズ別商品制限 ──────────────────────────────────────
+// 購買進行フェーズに応じて提案できる商品を絞る。
+// 選定ロジックはこの関数で絞った範囲内でのみ動作する。
+function filterProductsByPhase(phase: CustomerPhase | undefined): Product[] {
+  const all = Object.values(PRODUCTS)
+  switch (phase) {
+    case "free_done":
+    case "main_pending":
+      // 無料後 / メイン未購入 → main商品のみ
+      return all.filter((p) => p.kind === "main")
+    case "main_done":
+    case "upsell_stage":
+      // メイン購入済み → アップセル4商品
+      return all.filter((p) => p.kind === "upsell")
+    case "high_ticket":
+      // 上位購入済み → 高単価アップセルのみ（action_plan ¥9,800 を除外）
+      return all.filter((p) => p.kind === "upsell" && p.price > 9800)
+    default:
+      // phase未指定 → 後方互換でアップセル全商品
+      return all.filter((p) => p.kind === "upsell")
+  }
+}
+
+// セグメントCVで最高商品を探す。allowedIds の範囲内で段階的マッチ。
 // 優先順: type+state+temp → type+state → typeのみ → null（fallback）
 function selectBySegmentCV(
   stats: UpsellSegmentStat[],
   customerType: string,
   customerState: string,
   temperature: string,
+  allowedIds: Set<string>,
 ): Product | null {
-  const reliable = stats.filter((s) => s.is_reliable)
+  const reliable = stats.filter((s) => s.is_reliable && allowedIds.has(s.product_id))
 
   const matchers = [
     (s: UpsellSegmentStat) =>
@@ -528,9 +578,9 @@ function selectBySegmentCV(
   for (const match of matchers) {
     const hits = reliable.filter(match).sort((a, b) => b.cv_rate - a.cv_rate)
     if (hits.length > 0) {
-      const product = PRODUCTS[hits[0].product_id] ?? Object.values(PRODUCTS).find((p) => p.id === hits[0].product_id)
+      const product = Object.values(PRODUCTS).find((p) => p.id === hits[0].product_id)
       if (product) {
-        console.log("Upsell selected by segment:", hits[0].product_id, `(cv=${hits[0].cv_rate.toFixed(3)})`)
+        console.log(`Upsell selected by segment: ${hits[0].product_id} (cv=${hits[0].cv_rate.toFixed(3)})`)
         return product
       }
     }
@@ -545,25 +595,46 @@ function selectUpsellProduct(ctx: CandidateContext): Product {
     customerType  = "emotional",
     customerState = "satisfied",
     temperature   = "cool",
+    customerPhase,
   } = ctx
 
-  // ① セグメントCVで選定（type+state+temp → type+state → typeのみ）
-  const stats = getUpsellSegmentStats()
-  const segmentProduct = selectBySegmentCV(stats, customerType, customerState, temperature)
-  if (segmentProduct) return segmentProduct
+  // ① フェーズで提案可能商品を絞る
+  const allowed    = filterProductsByPhase(customerPhase)
+  const allowedIds = new Set(allowed.map((p) => p.id))
+  console.log(`Phase=${customerPhase ?? "unset"} Allowed=${[...allowedIds].join(",")}`)
 
-  // ② fallback: 文脈ベース候補 × 全体CV順
+  // ② セグメントCVで選定（allowed制限あり）
+  const stats          = getUpsellSegmentStats()
+  const segmentProduct = selectBySegmentCV(stats, customerType, customerState, temperature, allowedIds)
+  if (segmentProduct) {
+    console.log(`Selected=${segmentProduct.id}`)
+    return segmentProduct
+  }
+
+  // ③ fallback: 文脈ベース候補 × 全体CV順（allowed制限あり）
   const candidates: Product[] = []
 
-  if (tags.some((t) => resolveTag(t) === "不倫・複雑愛")) candidates.push(PRODUCTS.reverse)
-  if (customerState === "anxious") candidates.push(temperature === "hot" ? PRODUCTS.full : PRODUCTS.psyche)
-  if (customerState === "deciding")  candidates.push(PRODUCTS.action)
-  if (temperature   === "cold")      candidates.push(PRODUCTS.psyche)
-  if (candidates.length === 0)       candidates.push(PRODUCTS.action)
+  if (tags.some((t) => resolveTag(t) === "不倫・複雑愛") && allowedIds.has(PRODUCTS.reverse.id))
+    candidates.push(PRODUCTS.reverse)
+  if (customerState === "anxious") {
+    const hot = temperature === "hot" ? PRODUCTS.full : PRODUCTS.psyche
+    if (allowedIds.has(hot.id)) candidates.push(hot)
+  }
+  if (customerState === "deciding" && allowedIds.has(PRODUCTS.action.id))
+    candidates.push(PRODUCTS.action)
+  if (temperature === "cold" && allowedIds.has(PRODUCTS.psyche.id))
+    candidates.push(PRODUCTS.psyche)
+
+  if (candidates.length === 0) {
+    // 文脈候補が全滅した場合 → phase制限内の先頭商品（価格降順）を返す
+    const phaseSafe = allowed.sort((a, b) => b.price - a.price)[0] ?? PRODUCTS.main
+    console.log(`Selected=${phaseSafe.id} (phase-safe fallback)`)
+    return phaseSafe
+  }
 
   const cvMap = getProductCVMap()
   candidates.sort((a, b) => (cvMap[b.id] ?? 0) - (cvMap[a.id] ?? 0))
-  console.log("Upsell selected by fallback:", candidates[0].id)
+  console.log(`Selected=${candidates[0].id} (fallback CV)`)
   return candidates[0]
 }
 

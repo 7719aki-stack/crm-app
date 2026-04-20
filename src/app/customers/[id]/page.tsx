@@ -746,25 +746,22 @@ export default function CustomerDetailPage() {
               customerStatus={status}
               onSent={(entry) => {
                 setActions((prev) => [entry, ...prev]);
-                // 次回アクション日が記録されていれば customer state にも反映（表示を即時更新）
                 if (entry.nextAction) {
                   setCustomer((prev) => prev ? { ...prev, next_action: entry.nextAction ?? null } : null);
                 }
-                // 送信成功後、下書きをクリアして編集済みフラグをリセット
-                // setLineMessage は使わず直接更新（isLineEdited が true でも確実にクリアするため）
                 console.log("[lineMessage set]", "send-complete", '""');
                 setLineMessageState("");
                 saveCustomerMessageDraft(customerId, "");
                 setIsLineEdited(false);
               }}
+              onDbMessageSaved={(msg) => {
+                // 送信した内容をメッセージ履歴に即時追加
+                setDbMessages((prev) => [...prev, msg]);
+              }}
               injectText={lineMessage}
               injectKey={lineInjectKey}
               customerPhase={customerPhase}
               onEdit={(text) => {
-                // ユーザーが LINE送信欄を手動編集（空クリア含む）したとき:
-                // 1. 編集済みフラグを立てる（以降の自動上書きを全てブロック）
-                // 2. page 側の lineMessage と localStorage を即時同期する
-                //    → これがないと「空にしてもリロード時に戻る」バグが発生する
                 console.log("[lineMessage set]", "line-panel-edit", JSON.stringify(text));
                 setIsLineEdited(true);
                 setLineMessageState(text);

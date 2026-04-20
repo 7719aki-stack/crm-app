@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { ActionEntry } from "@/app/customers/dummyData";
+import type { DbMessage } from "@/app/api/customers/[id]/messages/route";
 import { saveCustomerMessageDraft } from "@/lib/messageDraft";
 import { generateAdaptiveDraft, type DraftCandidate } from "@/lib/generateAdaptiveDraft";
 import type { CustomerPhase } from "@/lib/getRecommendedProducts";
@@ -33,6 +34,8 @@ interface Props {
   customerId:    number;
   line_user_id?: string;
   onSent:        (entry: ActionEntry) => void;
+  /** 送信内容が messages テーブルに保存されたときに呼ばれる */
+  onDbMessageSaved?: (msg: DbMessage) => void;
   /** 外部から注入するテキスト（返信候補選択時など） */
   injectText?:   string;
   /** このキーが変化したときだけ injectText を textarea に反映する */
@@ -52,7 +55,7 @@ interface Props {
 type Phase = "input" | "confirm" | "sending" | "done" | "error";
 type DraftConfirmMode = "replace" | "append" | null;
 
-export function LineSendPanel({ customerId, line_user_id, onSent, injectText, injectKey, onEdit, onToneChange, customerTags, customerStatus, customerPhase }: Props) {
+export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSaved, injectText, injectKey, onEdit, onToneChange, customerTags, customerStatus, customerPhase }: Props) {
   const [text,              setText]              = useState("");
   const [selectedTone,      setSelectedTone]      = useState<Tone>("共感");
   const [nextAction,        setNextAction]         = useState("");
@@ -94,43 +97,38 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
     setErrorMsg("");
 
     try {
-      const res = await fetch("/api/line/push", {
-        method: "POST",
+      // messages テーブルにローカル保存（LINE API は呼ばない）
+      const res = await fetch(`/api/customers/${customerId}/messages/local`, {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, to: line_user_id }),
+        body: JSON.stringify({
+          text,
+          next_action: nextAction || undefined,
+        }),
       });
 
-      const json = await res.json();
-
       if (!res.ok) {
-        const detail =
-          typeof json.error === "object"
-            ? JSON.stringify(json.error)
-            : (json.error ?? res.statusText);
-        throw new Error(detail);
+        const json = await res.json().catch(() => ({}));
+        throw new Error((json as { error?: string }).error ?? "保存に失敗しました");
       }
 
-      // actionHistory に記録
+      const savedMsg: DbMessage = await res.json();
+
+      // 送信履歴を親に渡す（dbMessages への追加）
+      onDbMessageSaved?.(savedMsg);
+
+      // アクション履歴（localStorage）にも記録
       const { getCustomerRepository } = await import("@/lib/repository");
       const repo  = getCustomerRepository();
       const today = new Date().toISOString().slice(0, 10);
       const entry = repo.addAction(customerId, {
-        date:         today,
-        type:         "LINE送信",
-        note:         text,
+        date:       today,
+        type:       "LINE送信",
+        note:       text,
         selectedTone,
-        finalTone:    selectedTone,
-        nextAction:   nextAction || null,
+        finalTone:  selectedTone,
+        nextAction: nextAction || null,
       });
-
-      // 次回アクション日を DB に保存
-      if (nextAction) {
-        await fetch(`/api/customers/${customerId}`, {
-          method:  "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ next_action: nextAction }),
-        });
-      }
 
       onSent(entry);
       setPhase("done");
@@ -197,7 +195,7 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <p className="text-sm font-semibold text-emerald-700">送信完了 — 履歴に記録しました</p>
+        <p className="text-sm font-semibold text-emerald-700">送信履歴に保存しました</p>
         <button
           onClick={reset}
           className="text-xs text-gray-400 hover:text-brand-600 underline underline-offset-2"
@@ -217,11 +215,12 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-          <span className="font-semibold">送信先:</span>
-          {line_user_id
-            ? <span className="font-mono text-gray-700">{line_user_id}</span>
-            : <span className="text-amber-600">TEST_USER_ID（フォールバック）</span>
-          }
+          {line_user_id && (
+            <>
+              <span className="font-semibold">LINE ID:</span>
+              <span className="font-mono text-gray-700">{line_user_id}</span>
+            </>
+          )}
           <span className="font-semibold ml-2">トーン:</span>
           <span className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 font-medium">{selectedTone}</span>
           {nextAction && (
@@ -258,15 +257,10 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
     );
   }
 
-  // ── 送信可否判定 ──────────────────────────────────────
-  const hasLineUserId = !!line_user_id;
-  const hasText       = text.trim() !== "";
-  const canSend       = hasLineUserId && hasText;
-  const disabledReason = !hasLineUserId
-    ? "送信先の LINE ID が設定されていません"
-    : !hasText
-    ? "送信するメッセージを入力してください"
-    : null;
+  // ── 送信可否判定（ローカル保存なので LINE ID 不要）──────
+  const hasText        = text.trim() !== "";
+  const canSend        = hasText;
+  const disabledReason = !hasText ? "送信するメッセージを入力してください" : null;
 
   // ── 入力フォーム ──────────────────────────────────────
   return (
@@ -443,10 +437,11 @@ export function LineSendPanel({ customerId, line_user_id, onSent, injectText, in
         </p>
       )}
 
-      {disabledReason ? (
+      {disabledReason && (
         <p className="text-sm text-red-500 text-center">{disabledReason}</p>
-      ) : (
-        <p className="text-[10px] text-gray-400 text-center font-mono truncate">送信先: {line_user_id}</p>
+      )}
+      {line_user_id && !disabledReason && (
+        <p className="text-[10px] text-gray-400 text-center font-mono truncate">LINE ID: {line_user_id}</p>
       )}
     </div>
   );

@@ -313,3 +313,5 @@ export const supabase = {
     return new QueryBuilder(table);
   },
 };
+
+export { getDb };

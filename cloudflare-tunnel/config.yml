@@ -1,0 +1,16 @@
+# Cloudflare Tunnel 設定ファイル
+# 使用前に以下を自分の値に書き換えてください
+#
+# tunnel:          cloudflared tunnel create で発行されたトンネルID (UUID形式)
+# credentials-file: cloudflared login 後に生成された認証ファイルのパス
+# hostname:        Cloudflare で管理しているドメイン (例: crm.example.com)
+#
+# セットアップ手順は SETUP.md を参照してください
+
+tunnel: YOUR_TUNNEL_ID_HERE
+credentials-file: C:\Users\YOUR_USERNAME\.cloudflared\YOUR_TUNNEL_ID_HERE.json
+
+ingress:
+  - hostname: crm.YOUR_DOMAIN_HERE
+    service: http://localhost:3000
+  - service: http_status:404

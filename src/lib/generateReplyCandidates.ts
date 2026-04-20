@@ -407,38 +407,45 @@ const PRODUCTS: Record<string, Product> = {
   },
 }
 
-// 優先順位: 複雑恋愛タグ → 不安再燃 → 依存/不安タイプ → 行動型×決断直前 → デフォルト
-function selectUpsellProduct(
-  tags: string[],
-  customerType: CustomerType,
-  customerState: CustomerState,
-): Product {
+function buildNeedPhrase(ctx: CandidateContext): string {
+  const { customerState = "satisfied" } = ctx
+  if (customerState === "anxious")  return "不安の原因を整理しないと同じところで止まりやすいです"
+  if (customerState === "deciding") return "ここで動き方を間違えるとタイミング逃します"
+  if (customerState === "satisfied") return "ここからの詰めで結果が変わる段階です"
+  return "次の動きを整理する段階に入っています"
+}
+
+function selectUpsellProduct(ctx: CandidateContext): Product {
+  const {
+    tags          = [],
+    customerType  = "emotional",
+    customerState = "satisfied",
+    temperature   = "cool",
+  } = ctx
+
   if (tags.some((t) => resolveTag(t) === "不倫・複雑愛")) return PRODUCTS.reverse
-  if (customerState === "anxious")                         return PRODUCTS.full
-  if (customerType  === "hesitant")                        return PRODUCTS.psyche
-  if (customerType  === "decisive" && customerState === "deciding") return PRODUCTS.action
+  if (customerState === "anxious") return temperature === "hot" ? PRODUCTS.full : PRODUCTS.psyche
+  if (customerState === "deciding")                        return PRODUCTS.action
+  if (temperature   === "cold")                            return PRODUCTS.psyche
   return PRODUCTS.action
 }
 
 export function buildUpsellMessage(ctx: CandidateContext): string {
-  const {
-    tags,
-    customerType  = "emotional",
-    customerState = "satisfied",
-  } = ctx
-
-  const product = selectUpsellProduct(tags, customerType, customerState)
-  const priceStr = product.price.toLocaleString("ja-JP")
+  const product    = selectUpsellProduct(ctx)
+  const needPhrase = buildNeedPhrase(ctx)
+  const priceStr   = product.price.toLocaleString("ja-JP")
 
   return [
     "今回の流れを見ると、",
-    "ここから先が一番重要な分岐になります。",
+    "ここが一番分岐になるタイミングです。",
     "",
-    "このまま様子を見るか、",
-    "一歩踏み込むかで結果が変わるタイミングです。",
+    "ここで動くかどうかで、",
+    "正直かなり結果変わります。",
     "",
-    "もし今の状況に合わせて",
-    "具体的な動きまで整理したい場合は、",
+    `今の状態だと`,
+    needPhrase,
+    "",
+    "もしここまで整理しておきたいなら、",
     "",
     `${product.name}（¥${priceStr}）`,
     product.url,

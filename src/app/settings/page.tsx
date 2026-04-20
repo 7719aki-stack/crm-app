@@ -427,6 +427,104 @@ function PricePresetPanel() {
   );
 }
 
+// ─── バックアップパネル ───────────────────────────────
+function BackupPanel() {
+  const [status,  setStatus]  = useState<"idle" | "running" | "ok" | "error">("idle");
+  const [message, setMessage] = useState<string | null>(null);
+  const [sizeKB,  setSizeKB]  = useState<number | null>(null);
+  const [history, setHistory] = useState<{ filename: string; sizeKB: number; createdAt: string }[]>([]);
+
+  async function handleBackup() {
+    setStatus("running");
+    setMessage(null);
+    try {
+      const res  = await fetch("/api/backup");
+      const json = await res.json() as { ok?: boolean; filename?: string; sizeKB?: number; createdAt?: string; error?: string };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "エラーが発生しました");
+      setSizeKB(json.sizeKB ?? null);
+      setMessage(`${json.filename} を保存しました`);
+      setStatus("ok");
+      if (json.filename && json.sizeKB != null && json.createdAt) {
+        setHistory((prev) => [
+          { filename: json.filename!, sizeKB: json.sizeKB!, createdAt: json.createdAt! },
+          ...prev.slice(0, 4),
+        ]);
+      }
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "バックアップに失敗しました");
+      setStatus("error");
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800">データバックアップ</h3>
+          <p className="text-xs text-gray-400 mt-0.5">SQLiteデータベースを data/backup/ フォルダにコピーします</p>
+        </div>
+        <button
+          onClick={handleBackup}
+          disabled={status === "running"}
+          className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
+        >
+          {status === "running" ? (
+            <>
+              <span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
+              実行中…
+            </>
+          ) : (
+            <>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+              バックアップ作成
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="px-5 py-4 space-y-3">
+        {/* 結果メッセージ */}
+        {message && (
+          <div className={`flex items-start gap-2 text-xs px-3.5 py-3 rounded-lg border ${
+            status === "ok"
+              ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+              : "bg-red-50 text-red-600 border-red-100"
+          }`}>
+            <span className="text-base leading-none flex-shrink-0">{status === "ok" ? "✓" : "✕"}</span>
+            <div>
+              <p className="font-medium">{message}</p>
+              {status === "ok" && sizeKB != null && (
+                <p className="text-[11px] mt-0.5 opacity-80">ファイルサイズ: {sizeKB.toLocaleString()} KB</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 実行履歴（このセッション内） */}
+        {history.length > 0 && (
+          <div>
+            <p className="text-[11px] font-semibold text-gray-400 mb-2">今回の実行履歴</p>
+            <ul className="space-y-1">
+              {history.map((h) => (
+                <li key={h.filename} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+                  <span className="font-medium text-gray-700 truncate mr-3">{h.filename}</span>
+                  <span className="flex-shrink-0 text-gray-400">{h.sizeKB} KB</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <p className="text-[11px] text-gray-400">
+          保存先: <code className="bg-gray-100 px-1.5 py-0.5 rounded text-[10px]">data/backup/love-crm-YYYYMMDD-HHMMSS.db</code>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── その他の予定設定項目 ─────────────────────────────
 const OTHER_PLANNED = [
   { icon: "🔗", label: "LINE連携",        note: "LINE Official Account と接続" },
@@ -441,6 +539,9 @@ export default function SettingsPage() {
 
       {/* 料金プリセット（実装済み） */}
       <PricePresetPanel />
+
+      {/* バックアップ（実装済み） */}
+      <BackupPanel />
 
       {/* その他（準備中） */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">

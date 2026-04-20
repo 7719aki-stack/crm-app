@@ -19,7 +19,7 @@ import OfferMessagePanel from "@/components/customer/OfferMessagePanel";
 import MessageDraftPanel from "@/components/customer/MessageDraftPanel";
 import DiagnosisPanel from "@/components/customer/DiagnosisPanel";
 import DiagnosisTemplateSuggestionsPanel from "@/components/customer/DiagnosisTemplateSuggestionsPanel";
-import { generateReplyCandidates } from "@/lib/generateReplyCandidates";
+import { generateReplyCandidates, generateContextualCandidates } from "@/lib/generateReplyCandidates";
 import { getRecommendedProducts, resolvePhase } from "@/lib/getRecommendedProducts";
 import { generateOfferMessage } from "@/lib/generateOfferMessage";
 import {
@@ -449,11 +449,20 @@ export default function CustomerDetailPage() {
     }
   }
 
-  // ── 返信候補（安定した参照を保つことで ReplyCandidatesPanel の自動選択が正しく動く）
-  const replyCandidates = useMemo(
-    () => aiCandidates ?? generateReplyCandidates(tags),
-    [aiCandidates, tags]
-  );
+  // ── 返信候補（name・temperature・直近メッセージを反映した文脈考慮型）
+  const replyCandidates = useMemo(() => {
+    if (aiCandidates) return aiCandidates;
+    if (customer) {
+      return generateContextualCandidates({
+        name:           customer.name,
+        tags,
+        category:       customer.category,
+        temperature:    customer.temperature,
+        recentMessages: dbMessages.slice(-5),
+      });
+    }
+    return generateReplyCandidates(tags);
+  }, [aiCandidates, tags, customer, dbMessages]);
 
   // ── 返信候補クリック即保存 ────────────────────────────────
   async function handleSendDirect(text: string): Promise<void> {

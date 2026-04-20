@@ -114,3 +114,87 @@ export function generateReplyCandidates(
     generateSalesMessage(tags, concern),
   ];
 }
+
+// ─── 文脈考慮型 返信候補生成 ──────────────────────────────────
+// tags + name + category + temperature + 直近メッセージを使って
+// 3件の返信候補を生成する。既存 generateReplyCandidates より文脈に近い。
+
+export interface CandidateContext {
+  name:           string;
+  tags:           string[];
+  category:       string;
+  temperature:    string;
+  recentMessages: Array<{ direction: string; text: string }>;
+}
+
+// 温度感ごとの書き出しトーン
+const TEMP_OPENER: Record<string, string> = {
+  hot:  "今の気持ち、しっかり受け取りました。",
+  warm: "お話聞かせてくれてありがとうございます。",
+  cool: "メッセージありがとうございます。",
+  cold: "連絡くれて嬉しいです。",
+};
+
+// タグ別の悩みキーワード（文中に差し込む）
+const TOPIC_PHRASE: Record<string, string> = {
+  "復縁":         "復縁のこと",
+  "片思い・進展": "相手への気持ち",
+  "不倫・複雑愛": "複雑な状況",
+  "人間関係・仕事": "今の状況",
+  "金運・開運":   "流れのこと",
+};
+
+// カテゴリ別の締め文
+const CATEGORY_CLOSE: Record<string, string> = {
+  "片思い":     "一緒に考えていきましょうね。",
+  "復縁":       "焦らず、一歩ずつ進みましょう。",
+  "不倫":       "慎重に、でも正直に向き合いましょう。",
+  "夫婦問題":   "大切な関係だからこそ、丁寧に見ていきますね。",
+  "仕事・人間関係": "まず状況を整理しながら進めていきましょう。",
+  "金運":       "流れを整えるところから始めてみましょう。",
+};
+
+export function generateContextualCandidates(ctx: CandidateContext): string[] {
+  const { name, tags, category, temperature, recentMessages } = ctx;
+
+  const san      = name ? `${name}さん` : "あなた";
+  const opener   = TEMP_OPENER[temperature] ?? TEMP_OPENER.cool;
+
+  // 優先タグを解決
+  let topicPhrase = "今の気持ち";
+  for (const pt of PRIORITY_ORDER) {
+    const canonical = resolveTag(pt);
+    const hit = tags.some((t) => resolveTag(t) === canonical || t === pt);
+    if (hit) {
+      topicPhrase = TOPIC_PHRASE[canonical] ?? topicPhrase;
+      break;
+    }
+  }
+
+  const close = CATEGORY_CLOSE[category] ?? "一緒に考えていきましょうね。";
+
+  // 直近の受信メッセージ（顧客からの最後のメッセージ）を取得
+  const lastInbound = [...recentMessages]
+    .reverse()
+    .find((m) => m.direction === "inbound");
+
+  // 最後のメッセージから短いキーフレーズを抽出（先頭20文字）
+  const lastSnippet = lastInbound?.text
+    ? lastInbound.text.replace(/\n/g, " ").slice(0, 20)
+    : null;
+
+  // ── 候補1: 受け止め + 名前付きで共感 ──────────────────────
+  const candidate1 = lastSnippet
+    ? `${opener}\n${san}の「${lastSnippet}…」という気持ち、\nちゃんと受け止めています。`
+    : `${opener}\n${san}の${topicPhrase}、\nしっかり向き合わせてもらいますね。`;
+
+  // ── 候補2: 深掘り促し（温度感が高いほど積極的に）──────────
+  const candidate2 = temperature === "hot" || temperature === "warm"
+    ? `${san}の状況をもう少し詳しく教えてもらえますか？\nより具体的に一緒に考えていきたいので。`
+    : `もう少し教えてもらえると、\n${san}に合ったアドバイスができると思います。`;
+
+  // ── 候補3: 前向きな締め + カテゴリ別クロージング ──────────
+  const candidate3 = `${topicPhrase}については、\n焦らず丁寧に見ていきましょう。\n${close}`;
+
+  return [candidate1, candidate2, candidate3];
+}

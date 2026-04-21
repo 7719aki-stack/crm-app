@@ -97,25 +97,31 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
     setErrorMsg("");
 
     try {
-      // messages テーブルにローカル保存（LINE API は呼ばない）
-      const res = await fetch(`/api/customers/${customerId}/messages/local`, {
+      // LINE push + messages テーブルへ保存
+      const res = await fetch(`/api/customers/${customerId}/messages`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          next_action: nextAction || undefined,
-        }),
+        body: JSON.stringify({ text }),
       });
 
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error((json as { error?: string }).error ?? "保存に失敗しました");
+        throw new Error((json as { error?: string }).error ?? "LINE送信に失敗しました");
       }
 
       const savedMsg: DbMessage = await res.json();
 
       // 送信履歴を親に渡す（dbMessages への追加）
       onDbMessageSaved?.(savedMsg);
+
+      // next_action が指定されていれば顧客を更新
+      if (nextAction) {
+        await fetch(`/api/customers/${customerId}`, {
+          method:  "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ next_action: nextAction }),
+        });
+      }
 
       // アクション履歴（localStorage）にも記録
       const { getCustomerRepository } = await import("@/lib/repository");
@@ -195,7 +201,7 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <p className="text-sm font-semibold text-emerald-700">送信履歴に保存しました</p>
+        <p className="text-sm font-semibold text-emerald-700">LINE送信しました</p>
         <button
           onClick={reset}
           className="text-xs text-gray-400 hover:text-brand-600 underline underline-offset-2"
@@ -257,10 +263,15 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
     );
   }
 
-  // ── 送信可否判定（ローカル保存なので LINE ID 不要）──────
+  // ── 送信可否判定 ────────────────────────────────────────
   const hasText        = text.trim() !== "";
-  const canSend        = hasText;
-  const disabledReason = !hasText ? "送信するメッセージを入力してください" : null;
+  const hasLineId      = !!line_user_id;
+  const canSend        = hasText && hasLineId;
+  const disabledReason = !hasLineId
+    ? "LINE ID未設定 — 顧客詳細でLINE IDを登録してください"
+    : !hasText
+    ? "送信するメッセージを入力してください"
+    : null;
 
   // ── 入力フォーム ──────────────────────────────────────
   return (

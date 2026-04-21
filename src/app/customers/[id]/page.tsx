@@ -943,7 +943,7 @@ export default function CustomerDetailPage() {
                 ) : line_user_id ? (
                   <p className="text-xs font-mono text-gray-700 break-all">{line_user_id}</p>
                 ) : (
-                  <p className="text-xs text-gray-300">未設定（LINE Webhook で自動設定）</p>
+                  <p className="text-xs text-gray-300">未設定</p>
                 )}
               </div>
             </div>

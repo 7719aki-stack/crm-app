@@ -5,9 +5,10 @@ import { MESSAGE_TEMPLATES } from "@/lib/messageTemplates";
 
 interface Props {
   onSelect: (body: string) => void;
+  onAppend: (body: string) => void;
 }
 
-export function LineSendTemplatePanel({ onSelect }: Props) {
+export function LineSendTemplatePanel({ onSelect, onAppend }: Props) {
   const [open, setOpen] = useState(false);
   const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
 
@@ -68,17 +69,27 @@ export function LineSendTemplatePanel({ onSelect }: Props) {
                 </button>
 
                 {isOpen && (
-                  <div className="px-3 pb-3 flex flex-wrap gap-1.5 bg-gray-50/40">
-                    {cat.templates.map((tmpl) => (
-                      <button
-                        key={tmpl.label}
-                        type="button"
-                        onClick={() => onSelect(tmpl.body)}
-                        className="px-2.5 py-1 rounded-full text-xs border border-gray-200 bg-white text-gray-600 hover:border-brand-400 hover:text-brand-700 hover:bg-brand-50 transition-colors whitespace-nowrap"
-                      >
-                        {tmpl.label}
-                      </button>
-                    ))}
+                  <div className="px-3 pb-3 space-y-1.5 bg-gray-50/40">
+                    <div className="flex flex-wrap gap-1.5">
+                      {cat.templates.map((tmpl) => (
+                        <button
+                          key={tmpl.label}
+                          type="button"
+                          onClick={(e) => {
+                            if (e.shiftKey) {
+                              onAppend(tmpl.body);
+                            } else {
+                              onSelect(tmpl.body);
+                            }
+                          }}
+                          title="クリック: 上書き　Shift+クリック: 追記"
+                          className="px-2.5 py-1 rounded-full text-xs border border-gray-200 bg-white text-gray-600 hover:border-brand-400 hover:text-brand-700 hover:bg-brand-50 transition-colors whitespace-nowrap"
+                        >
+                          {tmpl.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-400">Shift+クリックで末尾に追記</p>
                   </div>
                 )}
               </div>

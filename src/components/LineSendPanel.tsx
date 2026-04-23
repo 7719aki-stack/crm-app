@@ -416,6 +416,16 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
           setDraftCandidates([]);
           setPhase("input");
         }}
+        onAppend={(body) => {
+          setText((prev) => {
+            const next = prev.trimEnd() ? `${prev.trimEnd()}\n\n${body}` : body;
+            saveCustomerMessageDraft(customerId, next);
+            onEdit?.(next);
+            return next;
+          });
+          setDraftCandidates([]);
+          setPhase("input");
+        }}
       />
 
       {/* メッセージ入力 */}

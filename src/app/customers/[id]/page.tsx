@@ -805,6 +805,15 @@ export default function CustomerDetailPage() {
               injectText={lineMessage}
               injectKey={lineInjectKey}
               customerPhase={customerPhase}
+              customer={{
+                category:    customer.category,
+                status:      status,
+                tags:        tags,
+                temperature: customer.temperature,
+                line_user_id: line_user_id || undefined,
+                funnel_stage: customer.funnel_stage,
+                consultation: customer.consultation,
+              }}
               onEdit={(text) => {
                 console.log("[lineMessage set]", "line-panel-edit", JSON.stringify(text));
                 setIsLineEdited(true);

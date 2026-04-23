@@ -7,6 +7,7 @@ import { saveCustomerMessageDraft } from "@/lib/messageDraft";
 import { generateAdaptiveDraft, type DraftCandidate } from "@/lib/generateAdaptiveDraft";
 import type { CustomerPhase } from "@/lib/getRecommendedProducts";
 import { LineSendTemplatePanel } from "@/components/LineSendTemplatePanel";
+import type { CustomerContext } from "@/lib/recommendTemplates";
 
 const PHASE_CTA: Record<CustomerPhase, string> = {
   cold: "不安を整理して、今の状態を見てみる",
@@ -58,12 +59,14 @@ interface Props {
   customerStatus?: string;
   /** 顧客フェーズ（CTA文言の切り替えに使う） */
   customerPhase?: CustomerPhase;
+  /** おすすめテンプレ表示に使う顧客コンテキスト */
+  customer?: CustomerContext;
 }
 
 type Phase = "input" | "confirm" | "sending" | "done" | "error";
 type DraftConfirmMode = "replace" | "append" | null;
 
-export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSaved, injectText, injectKey, onEdit, onToneChange, customerTags, customerStatus, customerPhase }: Props) {
+export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSaved, injectText, injectKey, onEdit, onToneChange, customerTags, customerStatus, customerPhase, customer }: Props) {
   const [text,              setText]              = useState("");
   const [selectedTone,      setSelectedTone]      = useState<Tone>("共感");
   const [nextAction,        setNextAction]         = useState("");
@@ -424,6 +427,7 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
           setDraftCandidates([]);
           setPhase("input");
         }}
+        customer={customer}
       />
 
       {/* メッセージ入力 */}

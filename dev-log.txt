@@ -1,0 +1,14 @@
+▲ Next.js 16.2.3 (Turbopack)
+- Local:         http://localhost:3099
+- Network:       http://172.18.192.1:3099
+- Environments: .env.local
+✓ Ready in 665ms
+
+ GET /api/customers 200 in 241ms (next.js: 217ms, application-code: 24ms)
+ GET /api/customers 200 in 8ms (next.js: 3ms, application-code: 5ms)
+ GET /api/customers/1 200 in 866ms (next.js: 834ms, application-code: 31ms)
+ GET /customers/1 200 in 751ms (next.js: 535ms, application-code: 216ms)
+ GET /api/customers/1 200 in 23ms (next.js: 13ms, application-code: 10ms)
+ GET /api/customers/1/messages 200 in 758ms (next.js: 746ms, application-code: 12ms)
+ GET /api/customers/1 200 in 51ms (next.js: 44ms, application-code: 7ms)
+ GET /api/customers/1/messages 200 in 21ms (next.js: 12ms, application-code: 9ms)

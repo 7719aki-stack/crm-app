@@ -207,6 +207,14 @@ export default function CustomerDetailPage() {
       setLineInjectKey((k) => k + 1);
     }
   }
+  /** アクション履歴の再利用ボタン。isLineEdited に関わらず強制注入する */
+  function reuseMessage(note: string) {
+    setIsLineEdited(false);
+    setLineMessageState(note);
+    saveCustomerMessageDraft(customerId, note);
+    setLineInjectKey((k) => k + 1);
+  }
+
   /** MessageDraftPanel の onChange 専用。下書きを保存するが LineSendPanel には再注入しない */
   function handleDraftChange(text: string) {
     console.log("[lineMessage set]", "draft-change", JSON.stringify(text));
@@ -829,7 +837,18 @@ export default function CustomerDetailPage() {
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-600 leading-snug">{a.note}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm text-gray-600 leading-snug flex-1">{a.note}</p>
+                      {a.note && (
+                        <button
+                          type="button"
+                          onClick={() => reuseMessage(a.note)}
+                          className="flex-shrink-0 text-[10px] text-gray-400 border border-gray-200 px-2 py-0.5 rounded-full hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 transition-colors whitespace-nowrap"
+                        >
+                          再利用
+                        </button>
+                      )}
+                    </div>
                     {a.nextAction && (
                       <p className="text-[11px] text-amber-600 mt-0.5">次回: {a.nextAction}</p>
                     )}

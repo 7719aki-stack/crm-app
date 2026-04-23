@@ -6,6 +6,7 @@ import type { DbMessage } from "@/app/api/customers/[id]/messages/route";
 import { saveCustomerMessageDraft } from "@/lib/messageDraft";
 import { generateAdaptiveDraft, type DraftCandidate } from "@/lib/generateAdaptiveDraft";
 import type { CustomerPhase } from "@/lib/getRecommendedProducts";
+import { LineSendTemplatePanel } from "@/components/LineSendTemplatePanel";
 
 const PHASE_CTA: Record<CustomerPhase, string> = {
   cold: "不安を整理して、今の状態を見てみる",
@@ -405,6 +406,17 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
           </div>
         </div>
       )}
+
+      {/* テンプレ選択 */}
+      <LineSendTemplatePanel
+        onSelect={(body) => {
+          setText(body);
+          saveCustomerMessageDraft(customerId, body);
+          onEdit?.(body);
+          setDraftCandidates([]);
+          setPhase("input");
+        }}
+      />
 
       {/* メッセージ入力 */}
       <div>

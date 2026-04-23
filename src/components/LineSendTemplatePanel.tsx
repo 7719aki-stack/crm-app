@@ -49,6 +49,10 @@ export function LineSendTemplatePanel({ value, onSelect }: Props) {
     });
   }
 
+  function closeAll() {
+    setOpenCategories(new Set());
+  }
+
   function handleSelect(body: string, e: React.MouseEvent) {
     if (e.shiftKey) {
       onSelect(value ? `${value}\n${body}` : body);
@@ -63,13 +67,15 @@ export function LineSendTemplatePanel({ value, onSelect }: Props) {
       .map((tmpl) => ({ catId: cat.id, label: tmpl.label, body: tmpl.body }))
   );
 
+  const anyOpen = openCategories.size > 0;
+
   return (
     <div>
       {/* トグルボタン */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 text-xs font-semibold text-gray-600 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 text-xs font-semibold text-gray-600 transition-colors"
       >
         <span className="flex items-center gap-1.5">
           <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -77,91 +83,133 @@ export function LineSendTemplatePanel({ value, onSelect }: Props) {
           </svg>
           テンプレを選ぶ
           {favTemplates.length > 0 && (
-            <span className="ml-1 text-amber-400">⭐{favTemplates.length}</span>
+            <span className="text-[10px] font-bold text-amber-500 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full ml-0.5">
+              ⭐ {favTemplates.length}
+            </span>
           )}
         </span>
         <svg
-          className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+          className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
           fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
+      {/* 展開パネル */}
       {open && (
-        <div className="mt-2 rounded-lg border border-gray-100 bg-white overflow-hidden divide-y divide-gray-50">
+        <div className="mt-1.5 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
 
-          {/* よく使うセクション */}
-          {favTemplates.length > 0 && (
-            <div className="px-3 py-3 bg-amber-50/60">
-              <p className="text-[11px] font-semibold text-amber-600 mb-2 flex items-center gap-1">
-                ⭐ よく使う
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {favTemplates.map((tmpl) => (
-                  <TemplateButton
-                    key={tmplKey(tmpl.catId, tmpl.label)}
-                    label={tmpl.label}
-                    body={tmpl.body}
-                    isFav={true}
-                    onSelect={(e) => handleSelect(tmpl.body, e)}
-                    onToggleFav={(e) => toggleFav(tmplKey(tmpl.catId, tmpl.label), e)}
-                  />
-                ))}
+          {/* ツールバー */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100 bg-gray-50/80">
+            <p className="text-[10px] text-gray-400">
+              クリック: 上書き　<kbd className="font-mono bg-gray-100 px-1 rounded text-[9px]">Shift</kbd>+クリック: 追記
+            </p>
+            {anyOpen && (
+              <button
+                type="button"
+                onClick={closeAll}
+                className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                全て閉じる
+              </button>
+            )}
+          </div>
+
+          {/* スクロール可能な内部エリア */}
+          <div className="max-h-[52vh] overflow-y-auto overscroll-contain divide-y divide-gray-100">
+
+            {/* よく使うセクション */}
+            {favTemplates.length > 0 && (
+              <div className="px-3 py-3 bg-amber-50/50">
+                <p className="text-[11px] font-bold text-amber-600 mb-2">⭐ よく使う</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {favTemplates.map((tmpl) => (
+                    <TemplateButton
+                      key={tmplKey(tmpl.catId, tmpl.label)}
+                      label={tmpl.label}
+                      body={tmpl.body}
+                      isFav={true}
+                      onSelect={(e) => handleSelect(tmpl.body, e)}
+                      onToggleFav={(e) => toggleFav(tmplKey(tmpl.catId, tmpl.label), e)}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* カテゴリ別セクション */}
-          {MESSAGE_TEMPLATES.map((cat) => {
-            const isOpen = openCategories.has(cat.id);
-            return (
-              <div key={cat.id}>
-                <button
-                  type="button"
-                  onClick={() => toggleCategory(cat.id)}
-                  className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 transition-colors"
-                >
-                  <span className="text-xs font-semibold text-gray-700">{cat.name}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-gray-400">{cat.templates.length}件</span>
-                    <svg
-                      className={`w-3 h-3 text-gray-400 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </button>
-
-                {isOpen && (
-                  <div className="px-3 pb-3 space-y-1.5 bg-gray-50/40">
-                    <div className="flex flex-wrap gap-1.5">
-                      {cat.templates.map((tmpl) => {
-                        const key = tmplKey(cat.id, tmpl.label);
-                        return (
-                          <TemplateButton
-                            key={key}
-                            label={tmpl.label}
-                            body={tmpl.body}
-                            isFav={favorites.has(key)}
-                            onSelect={(e) => handleSelect(tmpl.body, e)}
-                            onToggleFav={(e) => toggleFav(key, e)}
-                          />
-                        );
-                      })}
+            {/* カテゴリ別アコーディオン */}
+            {MESSAGE_TEMPLATES.map((cat) => {
+              const isOpen = openCategories.has(cat.id);
+              const favCount = cat.templates.filter((t) => favorites.has(tmplKey(cat.id, t.label))).length;
+              return (
+                <div key={cat.id}>
+                  {/* カテゴリヘッダー */}
+                  <button
+                    type="button"
+                    onClick={() => toggleCategory(cat.id)}
+                    className={`w-full flex items-center justify-between px-3 min-h-[44px] transition-colors ${
+                      isOpen ? "bg-brand-50/60" : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className={`text-xs font-semibold ${isOpen ? "text-brand-700" : "text-gray-700"}`}>
+                        {cat.name}
+                      </span>
+                      {favCount > 0 && (
+                        <span className="text-[9px] text-amber-500">⭐{favCount}</span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-gray-400">{cat.templates.length}件</span>
+                      <svg
+                        className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                          isOpen ? "rotate-180 text-brand-500" : "text-gray-400"
+                        }`}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
                     </div>
-                    <p className="text-[10px] text-gray-400">Shift+クリックで末尾に追記</p>
+                  </button>
+
+                  {/* アコーディオン本体（grid トリックでスムーズに開閉） */}
+                  <div
+                    className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+                      isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="px-3 pt-2 pb-3 bg-gray-50/40">
+                        <div className="flex flex-wrap gap-1.5">
+                          {cat.templates.map((tmpl) => {
+                            const key = tmplKey(cat.id, tmpl.label);
+                            return (
+                              <TemplateButton
+                                key={key}
+                                label={tmpl.label}
+                                body={tmpl.body}
+                                isFav={favorites.has(key)}
+                                onSelect={(e) => handleSelect(tmpl.body, e)}
+                                onToggleFav={(e) => toggleFav(key, e)}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            );
-          })}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
   );
 }
+
+// ── テンプレートボタン ──────────────────────────────────────────
 
 interface TemplateBtnProps {
   label:       string;
@@ -173,12 +221,12 @@ interface TemplateBtnProps {
 
 function TemplateButton({ label, isFav, onSelect, onToggleFav }: TemplateBtnProps) {
   return (
-    <span className="inline-flex items-center rounded-full border border-gray-200 bg-white overflow-hidden">
+    <span className="inline-flex items-center rounded-full border border-gray-200 bg-white overflow-hidden shadow-sm hover:shadow transition-shadow">
       <button
         type="button"
         onClick={onSelect}
         title="クリック: 上書き　Shift+クリック: 追記"
-        className="px-2.5 py-1 text-xs text-gray-600 hover:text-brand-700 hover:bg-brand-50 transition-colors whitespace-nowrap"
+        className="pl-3 pr-2 py-1.5 text-xs text-gray-600 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors whitespace-nowrap"
       >
         {label}
       </button>
@@ -186,7 +234,7 @@ function TemplateButton({ label, isFav, onSelect, onToggleFav }: TemplateBtnProp
         type="button"
         onClick={onToggleFav}
         title={isFav ? "お気に入りを解除" : "お気に入りに追加"}
-        className={`pr-2 pl-1 py-1 text-[11px] transition-colors ${
+        className={`pr-2.5 pl-1 py-1.5 text-[11px] transition-colors ${
           isFav
             ? "text-amber-400 hover:text-amber-500"
             : "text-gray-300 hover:text-amber-400"

@@ -814,6 +814,9 @@ export default function CustomerDetailPage() {
                 funnel_stage: customer.funnel_stage,
                 consultation: customer.consultation,
               }}
+              onStatusUpdated={(newStatus) => {
+                setStatus(newStatus as StatusId);
+              }}
               onEdit={(text) => {
                 console.log("[lineMessage set]", "line-panel-edit", JSON.stringify(text));
                 setIsLineEdited(true);

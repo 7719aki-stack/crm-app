@@ -8,6 +8,8 @@ import { generateAdaptiveDraft, type DraftCandidate } from "@/lib/generateAdapti
 import type { CustomerPhase } from "@/lib/getRecommendedProducts";
 import { LineSendTemplatePanel } from "@/components/LineSendTemplatePanel";
 import type { CustomerContext } from "@/lib/recommendTemplates";
+import { getStatus } from "@/lib/statuses";
+import type { StatusId } from "@/lib/statuses";
 
 const PHASE_CTA: Record<CustomerPhase, string> = {
   cold: "不安を整理して、今の状態を見てみる",
@@ -61,12 +63,21 @@ interface Props {
   customerPhase?: CustomerPhase;
   /** おすすめテンプレ表示に使う顧客コンテキスト */
   customer?: CustomerContext;
+  /** 送信後のステータス自動更新を親に通知する */
+  onStatusUpdated?: (newStatus: string) => void;
 }
 
 type Phase = "input" | "confirm" | "sending" | "done" | "error";
 type DraftConfirmMode = "replace" | "append" | null;
 
-export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSaved, injectText, injectKey, onEdit, onToneChange, customerTags, customerStatus, customerPhase, customer }: Props) {
+// ステータス更新結果の型
+type StatusUpdateInfo = {
+  fromLabel: string;
+  toLabel:   string;
+  error?:    string;
+};
+
+export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSaved, injectText, injectKey, onEdit, onToneChange, customerTags, customerStatus, customerPhase, customer, onStatusUpdated }: Props) {
   const [text,              setText]              = useState("");
   const [selectedTone,      setSelectedTone]      = useState<Tone>("共感");
   const [nextAction,        setNextAction]         = useState("");
@@ -75,6 +86,11 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
   const [draftCandidates,   setDraftCandidates]   = useState<DraftCandidate[]>([]);
   const [draftConfirm,      setDraftConfirm]      = useState<DraftConfirmMode>(null);
   const [pendingDraftText,  setPendingDraftText]  = useState("");
+
+  // ── 自動ステータス更新 ────────────────────────────────────
+  const [autoStatusUpdate,  setAutoStatusUpdate]  = useState(true);
+  const [pendingNextStatus, setPendingNextStatus] = useState<string | null>(null);
+  const [statusUpdateInfo,  setStatusUpdateInfo]  = useState<StatusUpdateInfo | null>(null);
 
   // selectedTone が変化したことを確認するデバッグログ
   useEffect(() => {
@@ -148,6 +164,30 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
       });
 
       onSent(entry);
+
+      // ── 自動ステータス更新（LINE送信成功後、失敗しても送信成功扱い）───
+      let updateInfo: StatusUpdateInfo | null = null;
+      if (autoStatusUpdate && pendingNextStatus) {
+        const fromLabel = getStatus(customerStatus as StatusId)?.label ?? customerStatus ?? "—";
+        const toLabel   = getStatus(pendingNextStatus as StatusId)?.label ?? pendingNextStatus;
+        try {
+          const statusRes = await fetch(`/api/customers/${customerId}`, {
+            method:  "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ status: pendingNextStatus }),
+          });
+          if (!statusRes.ok) throw new Error("ステータス更新APIエラー");
+          updateInfo = { fromLabel, toLabel };
+          onStatusUpdated?.(pendingNextStatus);
+        } catch (statusErr) {
+          updateInfo = {
+            fromLabel,
+            toLabel,
+            error: statusErr instanceof Error ? statusErr.message : "更新失敗",
+          };
+        }
+      }
+      setStatusUpdateInfo(updateInfo);
       setPhase("done");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "不明なエラー");
@@ -164,6 +204,8 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
     setDraftCandidates([]);
     setDraftConfirm(null);
     setPendingDraftText("");
+    setPendingNextStatus(null);
+    setStatusUpdateInfo(null);
   }
 
   // ── 下書き生成 ────────────────────────────────────────────
@@ -213,6 +255,31 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
           </svg>
         </div>
         <p className="text-sm font-semibold text-emerald-700">送信成功</p>
+
+        {/* ステータス更新結果 */}
+        {statusUpdateInfo && (
+          <div className={`w-full text-xs rounded-lg px-3 py-2 leading-relaxed ${
+            statusUpdateInfo.error
+              ? "bg-red-50 text-red-600 border border-red-100"
+              : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+          }`}>
+            {statusUpdateInfo.error ? (
+              <>
+                <span className="font-semibold">ステータス更新失敗: </span>
+                {statusUpdateInfo.error}
+              </>
+            ) : (
+              <>
+                <span className="font-semibold">ステータス自動更新: </span>
+                {statusUpdateInfo.fromLabel}
+                <span className="mx-1 text-emerald-400">→</span>
+                <span className="font-semibold">{statusUpdateInfo.toLabel}</span>
+                {" "}に変更しました
+              </>
+            )}
+          </div>
+        )}
+
         <button
           onClick={reset}
           className="text-xs text-gray-400 hover:text-brand-600 underline underline-offset-2"
@@ -420,12 +487,15 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
       {/* テンプレ選択 */}
       <LineSendTemplatePanel
         value={text}
-        onSelect={(body) => {
+        onSelect={(body, meta) => {
           setText(body);
           saveCustomerMessageDraft(customerId, body);
           onEdit?.(body);
           setDraftCandidates([]);
           setPhase("input");
+          // テンプレの nextStatus をセット（なければクリア）
+          setPendingNextStatus(meta?.nextStatus ?? null);
+          setStatusUpdateInfo(null);
         }}
         customer={customer}
       />
@@ -452,6 +522,28 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
           className="w-full px-3.5 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent"
         />
       </div>
+
+      {/* ── 自動ステータス更新トグル ──────────────────────────── */}
+      {pendingNextStatus && (
+        <div className="rounded-lg border border-brand-100 bg-brand-50/50 px-3 py-2.5 space-y-1">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={autoStatusUpdate}
+              onChange={(e) => setAutoStatusUpdate(e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-gray-300 text-brand-600 focus:ring-brand-400"
+            />
+            <span className="text-xs font-medium text-gray-700">送信後にステータスを自動更新</span>
+          </label>
+          {autoStatusUpdate && (
+            <p className="text-[10px] text-brand-600 pl-5">
+              → <span className="font-semibold">
+                {getStatus(pendingNextStatus as StatusId)?.label ?? pendingNextStatus}
+              </span>{" "}に変更予定
+            </p>
+          )}
+        </div>
+      )}
 
       <button
         onClick={() => setPhase("confirm")}

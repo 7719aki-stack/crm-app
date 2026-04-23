@@ -15,9 +15,16 @@ function catIdFromTmplId(id: string): string {
   return id.replace(/_\d+$/, "");
 }
 
+// catId + label でフルテンプレートを引く（nextStatus 取得用）
+const TMPL_BY_KEY = new Map(
+  TEMPLATES.map((t) => [`${catIdFromTmplId(t.id)}/${t.label}`, t])
+);
+
+export type TemplateMeta = { nextStatus?: string };
+
 interface Props {
   value:      string;
-  onSelect:   (body: string) => void;
+  onSelect:   (body: string, meta?: TemplateMeta) => void;
   customer?:  CustomerContext;
 }
 
@@ -61,19 +68,21 @@ export function LineSendTemplatePanel({ value, onSelect, customer }: Props) {
     setOpenCategories(new Set());
   }
 
-  function handleSelect(body: string, e: React.MouseEvent) {
-    if (e.shiftKey) {
-      onSelect(value ? `${value}\n${body}` : body);
-    } else {
-      onSelect(body);
-    }
+  function handleSelect(body: string, e: React.MouseEvent, meta?: TemplateMeta) {
+    const finalBody = e.shiftKey ? (value ? `${value}\n${body}` : body) : body;
+    onSelect(finalBody, meta);
   }
 
   // ── よく使うセクション ──────────────────────────────────
   const favTemplates = MESSAGE_TEMPLATES.flatMap((cat) =>
     cat.templates
       .filter((tmpl) => favorites.has(tmplKey(cat.id, tmpl.label)))
-      .map((tmpl) => ({ catId: cat.id, label: tmpl.label, body: tmpl.body }))
+      .map((tmpl) => ({
+        catId:      cat.id,
+        label:      tmpl.label,
+        body:       tmpl.body,
+        nextStatus: TMPL_BY_KEY.get(tmplKey(cat.id, tmpl.label))?.nextStatus,
+      }))
   );
 
   // ── おすすめテンプレ ────────────────────────────────────
@@ -201,7 +210,7 @@ export function LineSendTemplatePanel({ value, onSelect, customer }: Props) {
                         body={tmpl.body}
                         reasonLabel={tmpl.reasonLabel}
                         isFav={favorites.has(key)}
-                        onSelect={(e) => handleSelect(tmpl.body, e)}
+                        onSelect={(e) => handleSelect(tmpl.body, e, { nextStatus: tmpl.nextStatus })}
                         onToggleFav={(e) => toggleFav(key, e)}
                       />
                     );
@@ -221,7 +230,7 @@ export function LineSendTemplatePanel({ value, onSelect, customer }: Props) {
                       label={tmpl.label}
                       body={tmpl.body}
                       isFav={true}
-                      onSelect={(e) => handleSelect(tmpl.body, e)}
+                      onSelect={(e) => handleSelect(tmpl.body, e, { nextStatus: tmpl.nextStatus })}
                       onToggleFav={(e) => toggleFav(tmplKey(tmpl.catId, tmpl.label), e)}
                     />
                   ))}
@@ -279,14 +288,15 @@ export function LineSendTemplatePanel({ value, onSelect, customer }: Props) {
                         <div className="px-3 pt-2 pb-3 bg-gray-50/40">
                           <div className="flex flex-wrap gap-1.5">
                             {cat.templates.map((tmpl) => {
-                              const key = tmplKey(cat.id, tmpl.label);
+                              const key        = tmplKey(cat.id, tmpl.label);
+                              const fullTmpl   = TMPL_BY_KEY.get(key);
                               return (
                                 <TemplateButton
                                   key={key}
                                   label={tmpl.label}
                                   body={tmpl.body}
                                   isFav={favorites.has(key)}
-                                  onSelect={(e) => handleSelect(tmpl.body, e)}
+                                  onSelect={(e) => handleSelect(tmpl.body, e, { nextStatus: fullTmpl?.nextStatus })}
                                   onToggleFav={(e) => toggleFav(key, e)}
                                 />
                               );

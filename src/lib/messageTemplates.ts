@@ -19,6 +19,8 @@ export type Template = {
   label:    string;
   body:     string;
   purpose:  "共感" | "信頼" | "誘導" | "販売";
+  /** 送信後に自動適用するステータスID（StatusId） */
+  nextStatus?: string;
   /** おすすめスコアリング用メタデータ */
   recommendedFor?: {
     categories?:   string[];
@@ -54,31 +56,31 @@ export const TEMPLATES: Template[] = [
   // ── 初回返信（5件） ────────────────────────────────────────
   {
     id: "first_reply_01", category: "初回返信", purpose: "共感",
-    label: "読みました",
+    label: "読みました", nextStatus: "educating",
     body: "メッセージありがとうございます。しっかり読ませていただきました。\n少し一緒に整理していきましょう。",
     recommendedFor: { statuses: [...LEAD_S, ...DIV_S], funnel_stages: [1] },
   },
   {
     id: "first_reply_02", category: "初回返信", purpose: "共感",
-    label: "丁寧に見ます",
+    label: "丁寧に見ます", nextStatus: "educating",
     body: "ご相談ありがとうございます。今のお気持ち、丁寧に見ていきますね。\nまずはゆっくりお話を聞かせてください。",
     recommendedFor: { statuses: [...LEAD_S, ...DIV_S], funnel_stages: [1] },
   },
   {
     id: "first_reply_03", category: "初回返信", purpose: "共感",
-    label: "落ち着いて整理",
+    label: "落ち着いて整理", nextStatus: "educating",
     body: "送ってくださってありがとうございます。まずは落ち着いて状況を整理していきましょう。\n一人で抱え込まなくて大丈夫ですよ。",
     recommendedFor: { statuses: [...LEAD_S, ...DIV_S], temperatures: ["hot", "warm"], funnel_stages: [1] },
   },
   {
     id: "first_reply_04", category: "初回返信", purpose: "共感",
-    label: "受け取りました",
+    label: "受け取りました", nextStatus: "educating",
     body: "メッセージ、しっかり受け取りました。\n今の状況、一緒に見ていきますね。",
     recommendedFor: { statuses: [...LEAD_S, ...DIV_S], funnel_stages: [1] },
   },
   {
     id: "first_reply_05", category: "初回返信", purpose: "共感",
-    label: "気持ちを聞かせて",
+    label: "気持ちを聞かせて", nextStatus: "educating",
     body: "送ってくれてありがとうございます。\n今どんなお気持ちか、もう少し聞かせてもらえますか？",
     recommendedFor: { statuses: [...LEAD_S, ...DIV_S], funnel_stages: [1] },
   },
@@ -185,13 +187,13 @@ export const TEMPLATES: Template[] = [
   // ── 誘導（8件） ────────────────────────────────────────────
   {
     id: "guide_01", category: "誘導", purpose: "誘導",
-    label: "現状確認から",
+    label: "現状確認から", nextStatus: "divination_guided",
     body: "まずは今の状況をしっかり整理してみましょう。\nそこから見えてくることがあります。",
     recommendedFor: { statuses: [...DIV_S, "deep_guided"], temperatures: ["warm", "cool"], funnel_stages: [1, 2] },
   },
   {
     id: "guide_02", category: "誘導", purpose: "誘導",
-    label: "相手の状態を見る",
+    label: "相手の状態を見る", nextStatus: "divination_guided",
     body: "お相手の今の気持ちの向きを確認しておくと、次の動き方が見えやすくなります。",
     recommendedFor: {
       categories: ["片思い", "復縁", "不倫"],
@@ -201,13 +203,13 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "guide_03", category: "誘導", purpose: "誘導",
-    label: "流れを読む",
+    label: "流れを読む", nextStatus: "divination_guided",
     body: "今のタイミングを逃すと、流れが変わってしまう可能性があります。\n一度きちんと確認しておきましょう。",
     recommendedFor: { temperatures: ["warm", "hot"], statuses: [...DIV_S, "deep_guided"], funnel_stages: [1, 2] },
   },
   {
     id: "guide_04", category: "誘導", purpose: "誘導",
-    label: "深層を見る提案",
+    label: "深層を見る提案", nextStatus: "divination_guided",
     body: "表面的なやりとりだけでなく、お相手の深層を見ておくと状況が整理されます。",
     recommendedFor: {
       categories: ["復縁", "不倫", "複雑系"],
@@ -217,25 +219,25 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "guide_05", category: "誘導", purpose: "誘導",
-    label: "具体的な行動へ",
+    label: "具体的な行動へ", nextStatus: "divination_guided",
     body: "気持ちを整理したら、次は具体的な動き方を考えていきましょう。",
     recommendedFor: { temperatures: ["warm", "hot"], statuses: [...DIV_S, ...PAID_S], funnel_stages: [1, 2] },
   },
   {
     id: "guide_06", category: "誘導", purpose: "誘導",
-    label: "今がタイミング",
+    label: "今がタイミング", nextStatus: "divination_guided",
     body: "今がちょうど動きやすいタイミングだと感じます。\n一緒に確認してみませんか。",
     recommendedFor: { temperatures: ["warm", "hot"], statuses: ["free_sent", "deep_guided"], funnel_stages: [1, 2] },
   },
   {
     id: "guide_07", category: "誘導", purpose: "誘導",
-    label: "先を見ておく",
+    label: "先を見ておく", nextStatus: "divination_guided",
     body: "この先どうなるかの流れを少し見ておくと、迷いが減って動きやすくなります。",
     recommendedFor: { temperatures: ["warm", "cool"], statuses: [...DIV_S], funnel_stages: [1, 2] },
   },
   {
     id: "guide_08", category: "誘導", purpose: "誘導",
-    label: "一歩踏み出す",
+    label: "一歩踏み出す", nextStatus: "divination_guided",
     body: "考えすぎて動けなくなる前に、まず一歩だけ踏み出してみましょう。",
     recommendedFor: { temperatures: ["cold", "cool"], statuses: [...DIV_S, ...LEAD_S], funnel_stages: [1, 2] },
   },
@@ -243,7 +245,7 @@ export const TEMPLATES: Template[] = [
   // ── クロージング（10件） ──────────────────────────────────
   {
     id: "closing_01", category: "クロージング", purpose: "販売",
-    label: "深層恋愛鑑定へ",
+    label: "深層恋愛鑑定へ", nextStatus: "deep_guided",
     body: "より深く見るなら、深層恋愛鑑定（¥5,000）で細かく見ていけます。\n今の状況にしっかり向き合った内容をお渡しできます。",
     recommendedFor: {
       statuses: ["free_sent", "deep_guided"],
@@ -254,7 +256,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "closing_02", category: "クロージング", purpose: "販売",
-    label: "一段深く見る",
+    label: "一段深く見る", nextStatus: "deep_guided",
     body: "今回のケースは無料範囲より一段深く見た方が、流れがはっきりします。\n深層恋愛鑑定（¥5,000）で全体を整えましょう。",
     recommendedFor: {
       statuses: ["free_sent", "deep_guided", "divination_guided"],
@@ -264,7 +266,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "closing_03", category: "クロージング", purpose: "販売",
-    label: "判断しやすくなる",
+    label: "判断しやすくなる", nextStatus: "deep_guided",
     body: "深層恋愛鑑定（¥5,000）まで見ておくと、かなり判断しやすくなります。\n必要であればご案内しますね。",
     recommendedFor: {
       statuses: ["free_sent", "deep_guided"],
@@ -274,7 +276,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "closing_04", category: "クロージング", purpose: "販売",
-    label: "今がベストタイミング",
+    label: "今がベストタイミング", nextStatus: "deep_guided",
     body: "今の状況が続く前に、深層恋愛鑑定（¥5,000）で一度しっかり見ておくことをおすすめします。",
     recommendedFor: {
       statuses: ["deep_guided", "free_sent"],
@@ -284,7 +286,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "closing_05", category: "クロージング", purpose: "販売",
-    label: "奥の部分まで",
+    label: "奥の部分まで", nextStatus: "deep_guided",
     body: "お相手の気持ちの奥の部分まで見たいなら、深層恋愛鑑定（¥5,000）が向いています。",
     recommendedFor: {
       categories: ["片思い", "復縁", "不倫"],
@@ -294,7 +296,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "closing_06", category: "クロージング", purpose: "販売",
-    label: "次のステップへ",
+    label: "次のステップへ", nextStatus: "deep_guided",
     body: "無料の範囲で見えたことをベースに、深層恋愛鑑定（¥5,000）で詳しく整えていきましょう。",
     recommendedFor: {
       statuses: ["free_sent", "deep_guided"],
@@ -305,7 +307,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "closing_07", category: "クロージング", purpose: "販売",
-    label: "動き方まで整える",
+    label: "動き方まで整える", nextStatus: "deep_guided",
     body: "気持ちを確認するだけでなく、動き方まで整えるなら深層恋愛鑑定（¥5,000）が最適です。",
     recommendedFor: {
       statuses: ["free_sent", "deep_guided"],
@@ -315,7 +317,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "closing_08", category: "クロージング", purpose: "販売",
-    label: "今なら対応可能",
+    label: "今なら対応可能", nextStatus: "deep_guided",
     body: "今のタイミングであれば、深層恋愛鑑定（¥5,000）でこの状況にしっかり対応できます。",
     recommendedFor: {
       statuses: ["deep_guided", "free_sent"],
@@ -325,7 +327,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "closing_09", category: "クロージング", purpose: "販売",
-    label: "決断を後押し",
+    label: "決断を後押し", nextStatus: "deep_guided",
     body: "迷っているなら、深層恋愛鑑定（¥5,000）で一度はっきりさせましょう。\n動き出すための答えが見えてきます。",
     recommendedFor: {
       statuses: ["deep_guided", "free_sent"],
@@ -335,7 +337,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "closing_10", category: "クロージング", purpose: "販売",
-    label: "今の流れを変える",
+    label: "今の流れを変える", nextStatus: "deep_guided",
     body: "今の流れを変えていくなら、深層恋愛鑑定（¥5,000）で全体を整えてから動くのが一番早いです。",
     recommendedFor: {
       statuses: ["deep_guided", "free_sent"],
@@ -347,7 +349,7 @@ export const TEMPLATES: Template[] = [
   // ── 放置防止（5件） ────────────────────────────────────────
   {
     id: "retention_01", category: "放置防止", purpose: "誘導",
-    label: "その後は",
+    label: "その後は", nextStatus: "educating",
     body: "その後、状況に変化はありましたか？\n気になっていたのでご連絡しました。",
     recommendedFor: {
       statuses: [...EXIT_S, "paid_purchased", "full_reversal_purchased"],
@@ -356,7 +358,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "retention_02", category: "放置防止", purpose: "誘導",
-    label: "少し時間が経って",
+    label: "少し時間が経って", nextStatus: "educating",
     body: "前回から少し時間が経ちましたが、お気持ちはいかがですか？\nまた何かあれば一緒に見ていきましょう。",
     recommendedFor: {
       statuses: [...EXIT_S, "paid_purchased"],
@@ -365,7 +367,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "retention_03", category: "放置防止", purpose: "誘導",
-    label: "タイミングを逃さない",
+    label: "タイミングを逃さない", nextStatus: "educating",
     body: "状況が変わりやすいタイミングなので、早めに動いた方がいいかもしれません。\nお力になれますよ。",
     recommendedFor: {
       statuses: ["dormant", "paid_purchased"],
@@ -374,7 +376,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "retention_04", category: "放置防止", purpose: "誘導",
-    label: "迷いが強い時こそ",
+    label: "迷いが強い時こそ", nextStatus: "educating",
     body: "迷いが強くなってきた時ほど、早めに整理した方が楽になります。\n今がそのタイミングかもしれません。",
     recommendedFor: {
       statuses: [...EXIT_S],
@@ -384,7 +386,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "retention_05", category: "放置防止", purpose: "誘導",
-    label: "いつでも声をかけて",
+    label: "いつでも声をかけて", nextStatus: "educating",
     body: "いつでも声をかけてください。\n必要になったタイミングで一緒に見ていきます。",
     recommendedFor: {
       statuses: [...EXIT_S],
@@ -395,7 +397,7 @@ export const TEMPLATES: Template[] = [
   // ── アップセル（6件） ──────────────────────────────────────
   {
     id: "upsell_01", category: "アップセル", purpose: "販売",
-    label: "逆転アクション設計",
+    label: "逆転アクション設計", nextStatus: "reversal_proposed",
     body: "片思いや進展が止まっているなら、恋愛逆転アクション設計（¥9,800）が向いています。\n具体的な動き方まで一緒に固めていけます。",
     recommendedFor: {
       categories: ["片思い", "復縁", "婚活"],
@@ -406,7 +408,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "upsell_02", category: "アップセル", purpose: "販売",
-    label: "深層心理完全解析",
+    label: "深層心理完全解析", nextStatus: "deep_psych_proposed",
     body: "復縁や複雑な状況を深く整理したいなら、深層心理完全解析（¥19,800）があります。\nお相手の本音の部分まで丁寧に見ていけます。",
     recommendedFor: {
       categories: ["復縁", "不倫", "複雑系"],
@@ -417,7 +419,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "upsell_03", category: "アップセル", purpose: "販売",
-    label: "運命修正プログラム",
+    label: "運命修正プログラム", nextStatus: "destiny_proposed",
     body: "今の状況を根本から変えていきたいなら、運命修正プログラム（¥29,800）が合っています。\n全体の流れを整えながら動けるようになります。",
     recommendedFor: {
       categories: ["復縁", "複雑系", "不倫"],
@@ -428,7 +430,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "upsell_04", category: "アップセル", purpose: "販売",
-    label: "完全逆転プログラム",
+    label: "完全逆転プログラム", nextStatus: "full_reversal_sounded",
     body: "本気でこの関係を逆転させたいなら、完全逆転プログラム（¥49,800）があります。\n最も深い部分から、動き方の全てを固めていきます。",
     recommendedFor: {
       statuses: ["full_reversal_sounded", "destiny_proposed", "deep_psych_proposed"],
@@ -439,7 +441,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "upsell_05", category: "アップセル", purpose: "販売",
-    label: "本音と動き方",
+    label: "本音と動き方", nextStatus: "destiny_proposed",
     body: "お相手の本音だけでなく、具体的な動き方まで固めたいなら次のステップが向いています。\n必要であればご案内しますね。",
     recommendedFor: {
       statuses: ["paid_purchased", "free_sent", "destiny_proposed"],
@@ -449,7 +451,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: "upsell_06", category: "アップセル", purpose: "販売",
-    label: "最上位サポート",
+    label: "最上位サポート", nextStatus: "full_reversal_sounded",
     body: "最短で結果を出したいなら、最も手厚いサポートが受けられる完全逆転プログラム（¥49,800）をご案内できます。",
     recommendedFor: {
       statuses: [...UP_S, "paid_purchased"],

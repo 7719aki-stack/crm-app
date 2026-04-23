@@ -267,8 +267,11 @@ export default function CustomerDetailPage() {
 
   // ── データ取得 ──────────────────────────────────────────
   useEffect(() => {
-    // 顧客が切り替わったら編集済みフラグをリセットして新顧客の下書きを注入できるようにする
+    // 顧客切り替え時に前回のステートをリセット
     setIsLineEdited(false);
+    setNotFound(false);
+    setLoading(true);
+    setCustomer(null);
 
     if (isNaN(customerId)) {
       setNotFound(true);
@@ -276,13 +279,18 @@ export default function CustomerDetailPage() {
       return;
     }
 
-    Promise.all([
-      fetch(`/api/customers/${customerId}`).then((r) => {
-        if (r.status === 404) { setNotFound(true); return null; }
-        return r.json() as Promise<CustomerDetail>;
-      }),
-      fetch(`/api/customers/${customerId}/messages`).then((r) => r.json() as Promise<DbMessage[]>),
-    ]).then(([c, msgs]) => {
+    // 顧客取得（404以外のエラーも notFound 扱い）
+    const customerFetch = fetch(`/api/customers/${customerId}`).then((r) => {
+      if (!r.ok) { setNotFound(true); return null; }
+      return r.json() as Promise<CustomerDetail>;
+    });
+
+    // メッセージ取得（失敗しても顧客表示は継続）
+    const messagesFetch = fetch(`/api/customers/${customerId}/messages`)
+      .then((r) => r.ok ? r.json() as Promise<DbMessage[]> : ([] as DbMessage[]))
+      .catch(() => [] as DbMessage[]);
+
+    Promise.all([customerFetch, messagesFetch]).then(([c, msgs]) => {
       if (c) {
         setCustomer(c);
         setStatus(c.status);

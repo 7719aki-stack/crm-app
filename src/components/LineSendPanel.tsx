@@ -20,6 +20,13 @@ const PHASE_SUB_CTA: Record<CustomerPhase, string> = {
 };
 const FALLBACK_CTA = "この内容で送信";
 
+function resolveHttpError(status: number, serverMsg?: string): string {
+  if (status === 401) return "LINEトークンが無効です";
+  if (status === 400) return "リクエストが不正です";
+  if (status === 500) return "サーバーエラーが発生しました";
+  return serverMsg ?? "LINE送信に失敗しました";
+}
+
 const TONES = ["共感", "背中押し", "アップセル", "報告受け", "フォロー"] as const;
 type Tone = typeof TONES[number];
 
@@ -107,7 +114,7 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
 
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error((json as { error?: string }).error ?? "LINE送信に失敗しました");
+        throw new Error(resolveHttpError(res.status, (json as { error?: string }).error));
       }
 
       const savedMsg: DbMessage = await res.json();
@@ -202,7 +209,7 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <p className="text-sm font-semibold text-emerald-700">LINE送信しました</p>
+        <p className="text-sm font-semibold text-emerald-700">送信成功</p>
         <button
           onClick={reset}
           className="text-xs text-gray-400 hover:text-brand-600 underline underline-offset-2"

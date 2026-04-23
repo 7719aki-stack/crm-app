@@ -12,3 +12,8 @@
  GET /api/customers/1/messages 200 in 758ms (next.js: 746ms, application-code: 12ms)
  GET /api/customers/1 200 in 51ms (next.js: 44ms, application-code: 7ms)
  GET /api/customers/1/messages 200 in 21ms (next.js: 12ms, application-code: 9ms)
+ GET /api/customers 200 in 81ms (next.js: 59ms, application-code: 22ms)
+ GET /api/customers/1 200 in 52ms (next.js: 40ms, application-code: 12ms)
+ GET /api/customers/1/messages 200 in 42ms (next.js: 29ms, application-code: 13ms)
+ GET /api/customers 200 in 8ms (next.js: 3ms, application-code: 5ms)
+ GET /api/customers/1 200 in 22ms (next.js: 13ms, application-code: 9ms)

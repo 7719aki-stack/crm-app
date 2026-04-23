@@ -4,11 +4,11 @@ import { useState } from "react";
 import { MESSAGE_TEMPLATES } from "@/lib/messageTemplates";
 
 interface Props {
+  value: string;
   onSelect: (body: string) => void;
-  onAppend: (body: string) => void;
 }
 
-export function LineSendTemplatePanel({ onSelect, onAppend }: Props) {
+export function LineSendTemplatePanel({ value, onSelect }: Props) {
   const [open, setOpen] = useState(false);
   const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
 
@@ -77,7 +77,7 @@ export function LineSendTemplatePanel({ onSelect, onAppend }: Props) {
                           type="button"
                           onClick={(e) => {
                             if (e.shiftKey) {
-                              onAppend(tmpl.body);
+                              onSelect(value ? `${value}\n${tmpl.body}` : tmpl.body);
                             } else {
                               onSelect(tmpl.body);
                             }

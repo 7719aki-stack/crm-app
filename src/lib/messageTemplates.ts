@@ -40,6 +40,7 @@ const CATEGORY_ID: Record<string, string> = {
   "クロージング": "closing",
   "放置防止":     "retention",
   "アップセル":   "upsell",
+  "フォロー":     "follow_up",
 };
 
 // ── ステータスグループ定義（recommendedFor 記述用） ────────────
@@ -50,7 +51,7 @@ const UP_S    = ["destiny_proposed", "reversal_proposed", "deep_psych_proposed",
                  "full_reversal_sounded", "full_reversal_purchased"];
 const EXIT_S  = ["dormant", "churned"];
 
-// ── テンプレート定義（48件） ──────────────────────────────────
+// ── テンプレート定義（53件） ──────────────────────────────────
 export const TEMPLATES: Template[] = [
 
   // ── 初回返信（5件） ────────────────────────────────────────
@@ -458,6 +459,53 @@ export const TEMPLATES: Template[] = [
       tags: ["リピーター", "有料購入"],
       temperatures: ["hot"],
       funnel_stages: [3, 4, 5],
+    },
+  },
+
+  // ── フォロー（5件） ────────────────────────────────────────
+  {
+    id: "follow_01", category: "フォロー", purpose: "誘導",
+    label: "その後は", nextStatus: "educating",
+    body: "その後いかがですか？\n気になっていたのでご連絡しました。",
+    recommendedFor: {
+      statuses: [...EXIT_S, ...LEAD_S],
+      temperatures: ["cold", "cool"],
+    },
+  },
+  {
+    id: "follow_02", category: "フォロー", purpose: "共感",
+    label: "気になっています",
+    body: "先日のことがずっと気になっていました。\nよかったらまた話しかけてください。",
+    recommendedFor: {
+      statuses: [...EXIT_S, "educating"],
+      temperatures: ["cold", "cool"],
+    },
+  },
+  {
+    id: "follow_03", category: "フォロー", purpose: "誘導",
+    label: "状況確認", nextStatus: "educating",
+    body: "最近状況に変化はありましたか？\n何かあれば気軽に教えてください。",
+    recommendedFor: {
+      statuses: [...LEAD_S, ...DIV_S],
+      temperatures: ["cool", "warm"],
+    },
+  },
+  {
+    id: "follow_04", category: "フォロー", purpose: "信頼",
+    label: "お役に立てると",
+    body: "何かお力になれることがあればと思いご連絡しました。\nどんな小さなことでも話しかけてください。",
+    recommendedFor: {
+      statuses: [...EXIT_S, ...LEAD_S],
+      temperatures: ["cold"],
+    },
+  },
+  {
+    id: "follow_05", category: "フォロー", purpose: "誘導",
+    label: "再スタート", nextStatus: "educating",
+    body: "少し時間が経ちましたが、また一緒に整理していきませんか？\n状況を教えていただければ、続きからサポートします。",
+    recommendedFor: {
+      statuses: [...EXIT_S],
+      temperatures: ["cold", "cool"],
     },
   },
 ];

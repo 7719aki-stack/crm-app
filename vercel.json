@@ -3,6 +3,10 @@
     {
       "path": "/api/scenario-schedules/process",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/follow-up/process",
+      "schedule": "0 * * * *"
     }
   ]
 }

@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TagEditor } from "@/components/TagEditor";
 import { StatusPicker } from "@/components/StatusPicker";
 import { LineSendPanel } from "@/components/LineSendPanel";
+import { FollowUpPanel } from "@/components/FollowUpPanel";
 import { ReceivedMessagePanel } from "@/components/ReceivedMessagePanel";
 import { ScenarioQueuePanel } from "@/components/ScenarioQueuePanel";
 import { EducationScenarioPanel } from "@/components/EducationScenarioPanel";
@@ -822,6 +823,22 @@ export default function CustomerDetailPage() {
                 setIsLineEdited(true);
                 setLineMessageState(text);
                 saveCustomerMessageDraft(customerId, text);
+              }}
+            />
+          </SectionCard>
+
+          {/* フォローアップパネル */}
+          <SectionCard title="フォローアップ">
+            <FollowUpPanel
+              customerId={customer.id}
+              dbMessages={dbMessages}
+              line_user_id={line_user_id}
+              onMessageSent={() => {
+                // 送信後にメッセージ履歴を再取得
+                fetch(`/api/customers/${customer.id}/messages`)
+                  .then((r) => r.json())
+                  .then((msgs) => setDbMessages(msgs))
+                  .catch(() => {});
               }}
             />
           </SectionCard>

@@ -10,6 +10,7 @@ import { LineSendTemplatePanel } from "@/components/LineSendTemplatePanel";
 import type { CustomerContext } from "@/lib/recommendTemplates";
 import { getStatus } from "@/lib/statuses";
 import type { StatusId } from "@/lib/statuses";
+import { saveSendResult, SEND_RESULT_LABELS, type SendResultType } from "@/lib/sendResultTracker";
 
 const PHASE_CTA: Record<CustomerPhase, string> = {
   cold: "不安を整理して、今の状態を見てみる",
@@ -91,6 +92,15 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
   const [autoStatusUpdate,  setAutoStatusUpdate]  = useState(true);
   const [pendingNextStatus, setPendingNextStatus] = useState<string | null>(null);
   const [statusUpdateInfo,  setStatusUpdateInfo]  = useState<StatusUpdateInfo | null>(null);
+
+  // ── テンプレートトラッキング ─────────────────────────────
+  const [tmplId,       setTmplId]      = useState<string | null>(null);
+  const [tmplLabel,    setTmplLabel]   = useState<string | null>(null);
+
+  // ── 送信結果記録 ─────────────────────────────────────────
+  const [resultType,   setResultType]  = useState<SendResultType | null>(null);
+  const [revenueStr,   setRevenueStr]  = useState("");
+  const [resultSaved,  setResultSaved] = useState(false);
 
   // selectedTone が変化したことを確認するデバッグログ
   useEffect(() => {
@@ -206,6 +216,11 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
     setPendingDraftText("");
     setPendingNextStatus(null);
     setStatusUpdateInfo(null);
+    setTmplId(null);
+    setTmplLabel(null);
+    setResultType(null);
+    setRevenueStr("");
+    setResultSaved(false);
   }
 
   // ── AI返信生成 ───────────────────────────────────────────
@@ -275,42 +290,133 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
 
   // ── 送信完了 ──────────────────────────────────────────
   if (phase === "done") {
+    const handleRecordResult = () => {
+      if (!resultType) return;
+      saveSendResult({
+        customerId,
+        templateId:    tmplId,
+        templateLabel: tmplLabel,
+        result:        resultType,
+        revenue:       resultType === "converted" ? (parseFloat(revenueStr) || 0) : 0,
+        timestamp:     new Date().toISOString(),
+      });
+      setResultSaved(true);
+    };
+
     return (
-      <div className="flex flex-col items-center gap-3 py-6">
-        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-          <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
+      <div className="space-y-4 py-2">
+        {/* 送信成功バナー */}
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+            <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <p className="text-sm font-semibold text-emerald-700">送信成功</p>
         </div>
-        <p className="text-sm font-semibold text-emerald-700">送信成功</p>
 
         {/* ステータス更新結果 */}
         {statusUpdateInfo && (
-          <div className={`w-full text-xs rounded-lg px-3 py-2 leading-relaxed ${
+          <div className={`text-xs rounded-lg px-3 py-2 leading-relaxed ${
             statusUpdateInfo.error
               ? "bg-red-50 text-red-600 border border-red-100"
               : "bg-emerald-50 text-emerald-700 border border-emerald-100"
           }`}>
             {statusUpdateInfo.error ? (
-              <>
-                <span className="font-semibold">ステータス更新失敗: </span>
-                {statusUpdateInfo.error}
-              </>
+              <><span className="font-semibold">ステータス更新失敗: </span>{statusUpdateInfo.error}</>
             ) : (
               <>
                 <span className="font-semibold">ステータス自動更新: </span>
                 {statusUpdateInfo.fromLabel}
                 <span className="mx-1 text-emerald-400">→</span>
-                <span className="font-semibold">{statusUpdateInfo.toLabel}</span>
-                {" "}に変更しました
+                <span className="font-semibold">{statusUpdateInfo.toLabel}</span>{" "}に変更しました
               </>
             )}
           </div>
         )}
 
+        {/* ── 結果記録UI ───────────────────────────────── */}
+        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+            結果を記録
+            {tmplLabel && (
+              <span className="ml-1.5 text-[10px] font-normal text-brand-500 normal-case">
+                テンプレ: {tmplLabel}
+              </span>
+            )}
+          </p>
+
+          {resultSaved ? (
+            <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="font-semibold">{SEND_RESULT_LABELS[resultType!]}</span>
+              {resultType === "converted" && parseFloat(revenueStr) > 0 && (
+                <span>— ¥{parseFloat(revenueStr).toLocaleString()}</span>
+              )}
+              <span>として記録しました</span>
+            </div>
+          ) : (
+            <>
+              {/* 結果タイプ選択 */}
+              <div className="flex gap-1.5 flex-wrap">
+                {(["no_response", "replied", "interested", "converted"] as SendResultType[]).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setResultType(r)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                      resultType === r
+                        ? r === "converted"
+                          ? "bg-emerald-600 text-white border-emerald-600"
+                          : r === "interested"
+                          ? "bg-amber-500 text-white border-amber-500"
+                          : r === "replied"
+                          ? "bg-sky-500 text-white border-sky-500"
+                          : "bg-gray-400 text-white border-gray-400"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    {SEND_RESULT_LABELS[r]}
+                  </button>
+                ))}
+              </div>
+
+              {/* 成約時の売上入力 */}
+              {resultType === "converted" && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">金額（任意）</span>
+                  <div className="relative flex-1">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">¥</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={revenueStr}
+                      onChange={(e) => setRevenueStr(e.target.value)}
+                      placeholder="9800"
+                      className="w-full pl-6 pr-3 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 記録ボタン */}
+              <button
+                type="button"
+                onClick={handleRecordResult}
+                disabled={!resultType}
+                className="w-full py-2 rounded-lg text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-brand-600 text-white hover:bg-brand-700 disabled:bg-gray-200 disabled:text-gray-400"
+              >
+                記録する
+              </button>
+            </>
+          )}
+        </div>
+
         <button
           onClick={reset}
-          className="text-xs text-gray-400 hover:text-brand-600 underline underline-offset-2"
+          className="w-full text-xs text-gray-400 hover:text-brand-600 underline underline-offset-2 py-1"
         >
           続けて送信する
         </button>
@@ -556,9 +662,11 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
           onEdit?.(body);
           setDraftCandidates([]);
           setPhase("input");
-          // テンプレの nextStatus をセット（なければクリア）
           setPendingNextStatus(meta?.nextStatus ?? null);
           setStatusUpdateInfo(null);
+          // テンプレートトラッキング用に id/label を記憶
+          setTmplId(meta?.templateId ?? null);
+          setTmplLabel(meta?.templateLabel ?? null);
         }}
         customer={customer}
       />

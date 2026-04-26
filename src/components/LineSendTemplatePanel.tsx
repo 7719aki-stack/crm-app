@@ -20,7 +20,11 @@ const TMPL_BY_KEY = new Map(
   TEMPLATES.map((t) => [`${catIdFromTmplId(t.id)}/${t.label}`, t])
 );
 
-export type TemplateMeta = { nextStatus?: string };
+export type TemplateMeta = {
+  nextStatus?:    string;
+  templateId?:    string;   // トラッキング用
+  templateLabel?: string;
+};
 
 interface Props {
   value:      string;
@@ -210,7 +214,11 @@ export function LineSendTemplatePanel({ value, onSelect, customer }: Props) {
                         body={tmpl.body}
                         reasonLabel={tmpl.reasonLabel}
                         isFav={favorites.has(key)}
-                        onSelect={(e) => handleSelect(tmpl.body, e, { nextStatus: tmpl.nextStatus })}
+                        onSelect={(e) => handleSelect(tmpl.body, e, {
+                          nextStatus:    tmpl.nextStatus,
+                          templateId:    tmpl.id,
+                          templateLabel: tmpl.label,
+                        })}
                         onToggleFav={(e) => toggleFav(key, e)}
                       />
                     );
@@ -230,7 +238,11 @@ export function LineSendTemplatePanel({ value, onSelect, customer }: Props) {
                       label={tmpl.label}
                       body={tmpl.body}
                       isFav={true}
-                      onSelect={(e) => handleSelect(tmpl.body, e, { nextStatus: tmpl.nextStatus })}
+                      onSelect={(e) => handleSelect(tmpl.body, e, {
+                        nextStatus:    tmpl.nextStatus,
+                        templateId:    tmplKey(tmpl.catId, tmpl.label),
+                        templateLabel: tmpl.label,
+                      })}
                       onToggleFav={(e) => toggleFav(tmplKey(tmpl.catId, tmpl.label), e)}
                     />
                   ))}
@@ -296,7 +308,11 @@ export function LineSendTemplatePanel({ value, onSelect, customer }: Props) {
                                   label={tmpl.label}
                                   body={tmpl.body}
                                   isFav={favorites.has(key)}
-                                  onSelect={(e) => handleSelect(tmpl.body, e, { nextStatus: fullTmpl?.nextStatus })}
+                                  onSelect={(e) => handleSelect(tmpl.body, e, {
+                                    nextStatus:    fullTmpl?.nextStatus,
+                                    templateId:    key,
+                                    templateLabel: tmpl.label,
+                                  })}
                                   onToggleFav={(e) => toggleFav(key, e)}
                                 />
                               );

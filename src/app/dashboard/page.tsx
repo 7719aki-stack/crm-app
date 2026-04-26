@@ -22,6 +22,7 @@ import {
 } from "@/lib/dashboard";
 import { SCORE_LABEL_STYLE } from "@/lib/customerScore";
 import { ChaseQueuePanel } from "@/components/dashboard/ChaseQueuePanel";
+import { WinTemplateRanking } from "@/components/dashboard/WinTemplateRanking";
 
 // ─── ファネル分布グループ定義（設定値） ──────────────────
 const funnelGroups = [
@@ -413,6 +414,9 @@ export default async function DashboardPage() {
 
       {/* ── 追客キュー ────────────────────────────────── */}
       <ChaseQueuePanel items={chaseQueue} />
+
+      {/* ── 勝ちテンプレランキング ───────────────────── */}
+      <WinTemplateRanking />
 
       {/* ════════════════════════════════════════════════
           既存: KPI / 売上分析 / ABテスト etc.

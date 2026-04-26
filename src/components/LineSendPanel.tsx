@@ -208,6 +208,34 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
     setStatusUpdateInfo(null);
   }
 
+  // ── AI返信生成 ───────────────────────────────────────────
+  const [aiGenLoading, setAiGenLoading] = useState(false);
+  const [aiGenError,   setAiGenError]   = useState<string | null>(null);
+  const [aiGenSource,  setAiGenSource]  = useState<string | null>(null);
+
+  async function handleAiGenerate() {
+    setAiGenLoading(true);
+    setAiGenError(null);
+    setAiGenSource(null);
+    try {
+      const res = await fetch("/api/ai/reply-draft", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ customerId }),
+      });
+      const data = await res.json() as { draft?: string; source?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "AI返信生成に失敗しました");
+      if (!data.draft) throw new Error("AI返信生成に失敗しました");
+      setAiGenSource(data.source ?? null);
+      // 既存テキストがあれば置き換え/追記ダイアログを出す
+      handleSelectDraft(data.draft);
+    } catch (e) {
+      setAiGenError(e instanceof Error ? e.message : "AI返信生成に失敗しました");
+    } finally {
+      setAiGenLoading(false);
+    }
+  }
+
   // ── 下書き生成 ────────────────────────────────────────────
   function handleGenerateDraft() {
     const candidates = generateAdaptiveDraft({
@@ -385,6 +413,41 @@ export function LineSendPanel({ customerId, line_user_id, onSent, onDbMessageSav
             </button>
           ))}
         </div>
+      </div>
+
+      {/* ── AI返信生成ボタン ─────────────────────────────── */}
+      <div>
+        <button
+          type="button"
+          onClick={handleAiGenerate}
+          disabled={aiGenLoading}
+          className="w-full py-2.5 rounded-lg bg-gradient-to-r from-violet-600 to-brand-600 text-white text-sm font-semibold hover:from-violet-700 hover:to-brand-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-sm"
+        >
+          {aiGenLoading ? (
+            <>
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={4} />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              AI生成中…
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              AI返信を生成
+            </>
+          )}
+        </button>
+        {aiGenSource && !aiGenLoading && (
+          <p className="text-[10px] text-gray-400 mt-1 text-center">
+            {aiGenSource === "fallback" ? "テンプレートから生成（AI未設定）" : `${aiGenSource.toUpperCase()} で生成`}
+          </p>
+        )}
+        {aiGenError && (
+          <p className="text-[10px] text-red-500 mt-1 text-center">{aiGenError}</p>
+        )}
       </div>
 
       {/* ── 下書きを作成ボタン ──────────────────────────── */}

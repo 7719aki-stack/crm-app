@@ -13,6 +13,7 @@ import {
   type CrisisLevel,
 } from "./dummyData";
 import { AddCustomerModal } from "./AddCustomerModal";
+import { calculateCustomerScore, SCORE_LABEL_STYLE, SCORE_BAR_COLOR } from "@/lib/customerScore";
 
 // ─── グループフィルタータブ ────────────────────────────
 type GroupFilter = StatusGroup | "all";
@@ -236,8 +237,36 @@ function TagFilterPanel({
   );
 }
 
+// ─── スコアバッジ ─────────────────────────────────────
+function ScoreBadge({ customer }: { customer: CustomerRow }) {
+  const { score, label } = calculateCustomerScore({
+    status:       customer.status,
+    temperature:  customer.temperature,
+    tags:         customer.tags,
+    next_action:  customer.next_action,
+    last_contact: customer.last_contact,
+  });
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${SCORE_LABEL_STYLE[label]}`}>
+        {label}
+      </span>
+      <div className="flex items-center gap-1.5">
+        <div className="w-14 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+          <div
+            className={`h-1.5 rounded-full ${SCORE_BAR_COLOR[label]}`}
+            style={{ width: `${score}%` }}
+          />
+        </div>
+        <span className="text-[11px] font-semibold text-gray-600">{score}</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── メインコンポーネント ──────────────────────────────
 type ActionFilter = "all" | "overdue";
+type SortKey = "nextAction" | "score";
 
 // next_action 昇順ソート（期限超過が先頭、null は最後）
 function sortByNextAction(a: CustomerRow, b: CustomerRow): number {
@@ -245,6 +274,16 @@ function sortByNextAction(a: CustomerRow, b: CustomerRow): number {
   if (!a.next_action) return 1;
   if (!b.next_action) return -1;
   return new Date(a.next_action).getTime() - new Date(b.next_action).getTime();
+}
+
+function getScore(c: CustomerRow): number {
+  return calculateCustomerScore({
+    status:       c.status,
+    temperature:  c.temperature,
+    tags:         c.tags,
+    next_action:  c.next_action,
+    last_contact: c.last_contact,
+  }).score;
 }
 
 export function CustomerList() {
@@ -256,6 +295,7 @@ export function CustomerList() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [sortKey,      setSortKey]      = useState<SortKey>("nextAction");
 
   function loadCustomers() {
     setLoading(true);
@@ -304,7 +344,10 @@ export function CustomerList() {
       }
       return true;
     })
-    .sort(sortByNextAction);
+    .sort(sortKey === "score"
+      ? (a, b) => getScore(b) - getScore(a)
+      : sortByNextAction
+    );
 
   const overdueCount = customers.filter(isOverdue).length;
 
@@ -414,6 +457,32 @@ export function CustomerList() {
         />
       )}
 
+      {/* ソートボタン */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">並び替え:</span>
+        <button
+          onClick={() => setSortKey("nextAction")}
+          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all ${
+            sortKey === "nextAction"
+              ? "bg-gray-900 text-white"
+              : "bg-white text-gray-500 border border-gray-200 hover:border-gray-300"
+          }`}
+        >
+          次回アクション順
+        </button>
+        <button
+          onClick={() => setSortKey("score")}
+          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all ${
+            sortKey === "score"
+              ? "bg-emerald-600 text-white"
+              : "bg-white text-emerald-600 border border-emerald-200 hover:bg-emerald-50"
+          }`}
+        >
+          <span className="text-[10px]">★</span>
+          スコア高い順
+        </button>
+      </div>
+
       {/* テーブル */}
       {loading ? (
         <div className="bg-white rounded-xl border border-gray-100 py-20 text-center">
@@ -430,22 +499,23 @@ export function CustomerList() {
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[1080px]">
+            <table className="w-full text-sm min-w-[1180px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   {[
-                    { label: "ID",           w: "w-12" },
-                    { label: "顧客名",       w: "w-44" },
-                    { label: "カテゴリ",     w: "w-24" },
-                    { label: "ステータス",   w: "w-20" },
-                    { label: "登録日",       w: "w-24" },
-                    { label: "タグ",         w: "w-52" },
-                    { label: "危機度",       w: "w-20" },
-                    { label: "温度感",       w: "w-24" },
-                    { label: "最終接触",     w: "w-24" },
+                    { label: "ID",             w: "w-12" },
+                    { label: "顧客名",         w: "w-44" },
+                    { label: "カテゴリ",       w: "w-24" },
+                    { label: "ステータス",     w: "w-20" },
+                    { label: "登録日",         w: "w-24" },
+                    { label: "タグ",           w: "w-52" },
+                    { label: "危機度",         w: "w-20" },
+                    { label: "温度感",         w: "w-24" },
+                    { label: "最終接触",       w: "w-24" },
                     { label: "次回アクション", w: "w-32" },
-                    { label: "最終購入日",   w: "w-24" },
-                    { label: "累計購入額",   w: "w-24" },
+                    { label: "スコア",         w: "w-28" },
+                    { label: "最終購入日",     w: "w-24" },
+                    { label: "累計購入額",     w: "w-24" },
                   ].map((col) => (
                     <th
                       key={col.label}
@@ -559,6 +629,11 @@ function CustomerTableRow({
       {/* 次回アクション */}
       <td className="px-4 py-3.5">
         <ActionDateCell date={c.next_action} />
+      </td>
+
+      {/* スコア */}
+      <td className="px-4 py-3.5">
+        <ScoreBadge customer={c} />
       </td>
 
       {/* 最終購入日 */}

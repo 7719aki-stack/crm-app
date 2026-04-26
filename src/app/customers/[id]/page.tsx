@@ -37,6 +37,7 @@ import type {
   ActionEntry,
 } from "@/app/customers/dummyData";
 import type { DbMessage } from "@/app/api/customers/[id]/messages/route";
+import { calculateCustomerScore, SCORE_LABEL_STYLE, SCORE_BAR_COLOR } from "@/lib/customerScore";
 
 // ── 定数 ─────────────────────────────────────────────────
 const CRISIS_DOT: Record<CrisisLevel, string> = {
@@ -1004,6 +1005,56 @@ export default function CustomerDetailPage() {
               </div>
             </div>
           </SectionCard>
+
+          {/* 成約見込みスコア */}
+          {(() => {
+            const scoreData = calculateCustomerScore(
+              {
+                status:        status,
+                temperature:   customer.temperature,
+                tags,
+                line_user_id:  line_user_id || null,
+                next_action:   customer.next_action,
+                consultation:  customer.consultation,
+                last_contact:  customer.last_contact,
+                crisis_level:  customer.crisis_level,
+              },
+              dbMessages.map((m) => ({
+                direction:  m.direction,
+                created_at: m.created_at,
+                source:     m.source,
+              })),
+            );
+            return (
+              <SectionCard title="成約見込みスコア">
+                <div className="space-y-3">
+                  {/* スコア数値 + ラベル */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-3xl font-bold text-gray-900">{scoreData.score}</span>
+                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${SCORE_LABEL_STYLE[scoreData.label]}`}>
+                      {scoreData.label}
+                    </span>
+                  </div>
+                  {/* プログレスバー */}
+                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-2 rounded-full transition-all ${SCORE_BAR_COLOR[scoreData.label]}`}
+                      style={{ width: `${scoreData.score}%` }}
+                    />
+                  </div>
+                  {/* 理由リスト */}
+                  <ul className="space-y-1.5">
+                    {scoreData.reasons.map((r) => (
+                      <li key={r} className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <span className="w-1.5 h-1.5 rounded-full bg-brand-400 flex-shrink-0" />
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </SectionCard>
+            );
+          })()}
 
           {/* 相手情報 */}
           {customer.partner && (

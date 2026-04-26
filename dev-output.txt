@@ -4,7 +4,37 @@
 
 ▲ Next.js 16.2.3 (Turbopack)
 - Local:         http://localhost:3000
-- Network:       http://192.168.128.146:3000
+- Network:       http://172.18.192.1:3000
 - Environments: .env.local
-✓ Ready in 324ms
+✓ Ready in 606ms
 
+ GET /api/customers 200 in 300ms (next.js: 242ms, application-code: 58ms)
+ POST /api/ai/reply-draft 404 in 316ms (next.js: 293ms, application-code: 23ms)
+ GET /api/customers 200 in 13ms (next.js: 4ms, application-code: 9ms)
+ POST /api/ai/reply-draft 404 in 10ms (next.js: 4ms, application-code: 6ms)
+ GET /api/customers 200 in 10ms (next.js: 5ms, application-code: 5ms)
+ GET /api/customers/1 200 in 718ms (next.js: 708ms, application-code: 10ms)
+ POST /api/ai/reply-draft 404 in 10ms (next.js: 3ms, application-code: 8ms)
+ GET /api/customers/1 200 in 26ms (next.js: 17ms, application-code: 9ms)
+[reply-draft] OpenAI failed: OpenAI error 429: {
+    "error": {
+        "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/gu
+[reply-draft] Anthropic failed: Anthropic error 401: {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"},"request_id":"req_011CaRmKQ3pdXqUE52miN8UN"}
+[reply-draft] All AI providers failed, using fallback. Errors: [
+  'OpenAI: OpenAI error 429: {\n' +
+    '    "error": {\n' +
+    '        "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/gu',
+  'Anthropic: Anthropic error 401: {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"},"request_id":"req_011CaRmKQ3pdXqUE52miN8UN"}'
+]
+ POST /api/ai/reply-draft 200 in 2.6s (next.js: 31ms, application-code: 2.6s)
+[reply-draft] OpenAI failed: OpenAI error 429: {
+    "error": {
+        "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/gu
+[reply-draft] Anthropic failed: Anthropic error 401: {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"},"request_id":"req_011CaRmNPnn2eweg9njCPG1s"}
+[reply-draft] All AI providers failed, using fallback. Errors: [
+  'OpenAI: OpenAI error 429: {\n' +
+    '    "error": {\n' +
+    '        "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/gu',
+  'Anthropic: Anthropic error 401: {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"},"request_id":"req_011CaRmNPnn2eweg9njCPG1s"}'
+]
+ POST /api/ai/reply-draft 200 in 2.1s (next.js: 3ms, application-code: 2.1s)

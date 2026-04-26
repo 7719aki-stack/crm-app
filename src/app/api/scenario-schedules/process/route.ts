@@ -182,27 +182,12 @@ async function runProcess() {
   };
 }
 
-// ─── GET /api/scenario-schedules/process ─────────────────
-// Vercel cron はこのエンドポイントを GET で呼び出す。
-// CRON_SECRET が設定されている場合は Authorization ヘッダーを検証する。
-export async function GET(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = req.headers.get("authorization");
-    if (auth !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
-
-  try {
-    const result = await runProcess();
-    console.log("[process cron]", JSON.stringify({ sent: result.sent, skipped: result.skipped, failed: result.failed }));
-    return NextResponse.json(result);
-  } catch (e) {
-    const reason = toErrorReason(e);
-    console.error("[GET /api/scenario-schedules/process]", reason, e);
-    return NextResponse.json({ error: reason }, { status: 500 });
-  }
+// ─── GET /api/scenario-schedules/process （自動実行無効化済み）─
+export async function GET(_req: NextRequest) {
+  return NextResponse.json(
+    { error: "自動実行は無効化されています。手動送信は POST を使用してください" },
+    { status: 405 },
+  );
 }
 
 // ─── POST /api/scenario-schedules/process ─────────────────

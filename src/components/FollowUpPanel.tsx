@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import type { DbMessage } from "@/app/api/customers/[id]/messages/route";
 
 type Props = {
@@ -10,8 +10,7 @@ type Props = {
   onMessageSent?: () => void;
 };
 
-const AUTO_FOLLOWUP_KEY = "crm_auto_followup";
-const FOLLOW_UP_HOURS   = 24;
+const FOLLOW_UP_HOURS = 24;
 
 function formatHoursAgo(date: Date, now: Date): string {
   const diffMs = now.getTime() - date.getTime();
@@ -23,20 +22,8 @@ function formatHoursAgo(date: Date, now: Date): string {
 }
 
 export function FollowUpPanel({ customerId, dbMessages, line_user_id, onMessageSent }: Props) {
-  const [autoEnabled, setAutoEnabled] = useState(true);
-  const [sending, setSending]         = useState(false);
-  const [result, setResult]           = useState<{ ok: boolean; message: string } | null>(null);
-
-  // localStorage から自動フォロー設定を読み込み
-  useEffect(() => {
-    const stored = localStorage.getItem(AUTO_FOLLOWUP_KEY);
-    if (stored !== null) setAutoEnabled(stored === "true");
-  }, []);
-
-  const toggleAuto = (val: boolean) => {
-    setAutoEnabled(val);
-    localStorage.setItem(AUTO_FOLLOWUP_KEY, String(val));
-  };
+  const [sending, setSending] = useState(false);
+  const [result, setResult]   = useState<{ ok: boolean; message: string } | null>(null);
 
   const now = useMemo(() => new Date(), []);
 
@@ -134,17 +121,6 @@ export function FollowUpPanel({ customerId, dbMessages, line_user_id, onMessageS
           )}
         </div>
       </div>
-
-      {/* 自動フォロートグル */}
-      <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-600">
-        <input
-          type="checkbox"
-          checked={autoEnabled}
-          onChange={(e) => toggleAuto(e.target.checked)}
-          className="h-3.5 w-3.5 rounded accent-brand-500"
-        />
-        自動フォロー（毎時 cron）を有効にする
-      </label>
 
       {/* 手動送信ボタン */}
       <button

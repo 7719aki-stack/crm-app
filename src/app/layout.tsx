@@ -3,7 +3,6 @@ import "./globals.css";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ABWinnerInit } from "@/components/ABWinnerInit";
-import { AutoReminderEngine } from "@/components/AutoReminderEngine";
 
 export const metadata: Metadata = {
   title: "Luna CRM",
@@ -15,7 +14,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ja">
       <body>
         <ABWinnerInit />
-        <AutoReminderEngine />
         <div className="flex h-screen bg-slate-50 overflow-hidden">
           {/* サイドバー */}
           <Sidebar />

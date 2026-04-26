@@ -38,3 +38,7 @@
   'Anthropic: Anthropic error 401: {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"},"request_id":"req_011CaRmNPnn2eweg9njCPG1s"}'
 ]
  POST /api/ai/reply-draft 200 in 2.1s (next.js: 3ms, application-code: 2.1s)
+ GET /dashboard 200 in 744ms (next.js: 73ms, application-code: 670ms)
+ GET /dashboard 200 in 72ms (next.js: 3ms, application-code: 70ms)
+✓ Compiled in 293ms
+✓ Compiled in 97ms

@@ -14,11 +14,14 @@ import type { CustomerRow, CrisisLevel } from "@/app/customers/dummyData";
 import {
   getPriorityCustomers,
   getFollowUpTargets,
+  getChaseQueue,
   buildTodaysSummary,
   type PriorityCustomer,
   type FollowUpTarget,
+  type ChaseQueueItem,
 } from "@/lib/dashboard";
 import { SCORE_LABEL_STYLE } from "@/lib/customerScore";
+import { ChaseQueuePanel } from "@/components/dashboard/ChaseQueuePanel";
 
 // ─── ファネル分布グループ定義（設定値） ──────────────────
 const funnelGroups = [
@@ -83,6 +86,7 @@ export default async function DashboardPage() {
   let abAnomalies:    string[]         = [];
   let priorityRanking: PriorityCustomer[] = [];
   let followUpTargets: FollowUpTarget[]   = [];
+  let chaseQueue:      ChaseQueueItem[]   = [];
   let abResult: import("@/lib/getSalesSummary").ABResult = {
     A: { variant: "A", clicks: 0, purchases: 0, upsells: 0, totalAmount: 0, upsellAmount: 0, cvr: 0, upsellRate: 0, revenuePerClick: 0, profitPerClick: 0 },
     B: { variant: "B", clicks: 0, purchases: 0, upsells: 0, totalAmount: 0, upsellAmount: 0, cvr: 0, upsellRate: 0, revenuePerClick: 0, profitPerClick: 0 },
@@ -173,6 +177,7 @@ export default async function DashboardPage() {
     // ── 営業ダッシュボード用データ ──────────────────────────
     priorityRanking = getPriorityCustomers(5);
     followUpTargets = getFollowUpTargets(10);
+    chaseQueue      = getChaseQueue(20);
   } catch (e) {
     console.error("[DashboardPage] DB error:", e);
   }
@@ -405,6 +410,9 @@ export default async function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* ── 追客キュー ────────────────────────────────── */}
+      <ChaseQueuePanel items={chaseQueue} />
 
       {/* ════════════════════════════════════════════════
           既存: KPI / 売上分析 / ABテスト etc.

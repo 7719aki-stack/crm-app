@@ -11,6 +11,14 @@ import { getProduct } from "@/lib/products";
 import type { ProductId } from "@/lib/products";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { CustomerRow, CrisisLevel } from "@/app/customers/dummyData";
+import {
+  getPriorityCustomers,
+  getFollowUpTargets,
+  buildTodaysSummary,
+  type PriorityCustomer,
+  type FollowUpTarget,
+} from "@/lib/dashboard";
+import { SCORE_LABEL_STYLE } from "@/lib/customerScore";
 
 // ─── ファネル分布グループ定義（設定値） ──────────────────
 const funnelGroups = [
@@ -72,7 +80,9 @@ export default async function DashboardPage() {
   let upsellCount       = 0;
   let upsellRate        = 0;
   let upsellRevenue     = 0;
-  let abAnomalies: string[] = [];
+  let abAnomalies:    string[]         = [];
+  let priorityRanking: PriorityCustomer[] = [];
+  let followUpTargets: FollowUpTarget[]   = [];
   let abResult: import("@/lib/getSalesSummary").ABResult = {
     A: { variant: "A", clicks: 0, purchases: 0, upsells: 0, totalAmount: 0, upsellAmount: 0, cvr: 0, upsellRate: 0, revenuePerClick: 0, profitPerClick: 0 },
     B: { variant: "B", clicks: 0, purchases: 0, upsells: 0, totalAmount: 0, upsellAmount: 0, cvr: 0, upsellRate: 0, revenuePerClick: 0, profitPerClick: 0 },
@@ -159,6 +169,10 @@ export default async function DashboardPage() {
       ORDER BY next_action ASC
       LIMIT 5
     `).all() as typeof urgentCustomers;
+
+    // ── 営業ダッシュボード用データ ──────────────────────────
+    priorityRanking = getPriorityCustomers(5);
+    followUpTargets = getFollowUpTargets(10);
   } catch (e) {
     console.error("[DashboardPage] DB error:", e);
   }
@@ -184,6 +198,12 @@ export default async function DashboardPage() {
     })
     .slice(0, 3);
 
+  const todaysSummary = buildTodaysSummary({
+    priorityCustomers: priorityRanking,
+    followUpTargets,
+    overdueCount:      urgentCustomers.length,
+  });
+
   const funnelData = funnelGroups.map(({ group, label, dotCls }) => ({
     label,
     dotCls,
@@ -194,6 +214,201 @@ export default async function DashboardPage() {
   // ─── ページ本体 ───────────────────────────────────────────
   return (
     <div className="space-y-5">
+
+      {/* ════════════════════════════════════════════════
+          営業ダッシュボード
+          ════════════════════════════════════════════════ */}
+
+      {/* ── 今日やること ──────────────────────────────── */}
+      <div className="bg-gradient-to-r from-brand-600 to-violet-600 rounded-xl px-6 py-5 text-white shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-white/60 mb-1">今日やること</p>
+        {todaysSummary.totalToSend > 0 ? (
+          <p className="text-2xl font-bold leading-snug">
+            今日はあと{" "}
+            <span className="text-4xl font-extrabold">{todaysSummary.totalToSend}</span>
+            {" "}人に送ればOK
+          </p>
+        ) : (
+          <p className="text-2xl font-bold">今日の対応は完了しています</p>
+        )}
+        <div className="flex flex-wrap items-center gap-5 mt-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-300 flex-shrink-0" />
+            <span className="text-sm text-white/80">
+              優先顧客
+              <span className="text-white font-bold ml-1">{todaysSummary.priorityCount}</span>
+              名
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-300 flex-shrink-0" />
+            <span className="text-sm text-white/80">
+              フォロー対象
+              <span className="text-white font-bold ml-1">{todaysSummary.followUpCount}</span>
+              件
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-300 flex-shrink-0" />
+            <span className="text-sm text-white/80">
+              期限切れ
+              <span className="text-white font-bold ml-1">{todaysSummary.overdueCount}</span>
+              件
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 優先顧客ランキング TOP5 ──────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-gray-50 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-800">優先顧客ランキング</h3>
+          {priorityRanking.length > 0 && (
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-bold">
+              {priorityRanking.length}
+            </span>
+          )}
+          <p className="text-xs text-gray-400 ml-auto">スコア高い順 TOP5 — AIで今すぐ送れます</p>
+        </div>
+
+        {priorityRanking.length === 0 ? (
+          <div className="px-5 py-10 text-center">
+            <p className="text-sm text-gray-300">対象顧客なし</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {priorityRanking.map((c, i) => (
+              <div
+                key={c.id}
+                className="flex items-center gap-3 px-5 py-3.5 hover:bg-brand-50/40 transition-colors"
+              >
+                {/* 順位バッジ */}
+                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 ${
+                  i === 0 ? "bg-amber-400 text-white" :
+                  i === 1 ? "bg-gray-400 text-white" :
+                  i === 2 ? "bg-orange-300 text-white" :
+                  "bg-gray-100 text-gray-400"
+                }`}>{i + 1}</span>
+
+                {/* 名前 + LINE状態 */}
+                <div className="w-28 flex-shrink-0 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 leading-none truncate">
+                    {c.display_name || c.name}
+                  </p>
+                  {c.line_user_id ? (
+                    <span className="text-[10px] bg-green-50 text-green-600 border border-green-100 px-1.5 py-0.5 rounded-full mt-0.5 inline-block">
+                      LINE接続済
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-gray-300 mt-0.5 inline-block">LINE未接続</span>
+                  )}
+                </div>
+
+                {/* スコア */}
+                <div className="flex flex-col items-center gap-1 w-14 flex-shrink-0">
+                  <span className="text-xl font-extrabold text-gray-800 leading-none">{c.score}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${SCORE_LABEL_STYLE[c.scoreLabel]}`}>
+                    {c.scoreLabel}
+                  </span>
+                </div>
+
+                {/* 次回アクション + 理由 */}
+                <div className="flex-1 min-w-0 hidden sm:block">
+                  <ActionLabel date={c.next_action} />
+                  <div className="flex flex-wrap gap-x-2 mt-0.5">
+                    {c.scoreReasons.slice(0, 2).map((r) => (
+                      <span key={r} className="inline-flex items-center gap-1 text-[10px] text-gray-400">
+                        <span className="w-1 h-1 rounded-full bg-brand-300 flex-shrink-0" />
+                        {r}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 送るボタン（詳細＋AI生成への導線） */}
+                <Link
+                  href={`/customers/${c.id}`}
+                  className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-brand-600 px-3 py-1.5 rounded-lg hover:from-violet-700 hover:to-brand-700 transition-all shadow-sm"
+                >
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                  </svg>
+                  AIで送る
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── フォロー対象（24h 返信なし）────────────── */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-gray-50 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-800">フォロー対象</h3>
+          {followUpTargets.length > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold px-1.5">
+              {followUpTargets.length}
+            </span>
+          )}
+          <p className="text-xs text-gray-400 ml-auto">送信後 24h 以上・返信なし</p>
+        </div>
+
+        {followUpTargets.length === 0 ? (
+          <div className="px-5 py-8 text-center">
+            <p className="text-sm text-gray-300">フォロー対象なし</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {followUpTargets.map((f) => (
+              <div
+                key={f.id}
+                className="flex items-center gap-3 px-5 py-3 hover:bg-amber-50/30 transition-colors"
+              >
+                {/* アバター */}
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-200 to-orange-200 flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs font-bold text-amber-700">
+                    {(f.display_name || f.name)[0]}
+                  </span>
+                </div>
+
+                {/* 名前・ステータス */}
+                <div className="w-28 flex-shrink-0 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 leading-none truncate">
+                    {f.display_name}
+                  </p>
+                  <StatusBadge status={f.status as import("@/lib/statuses").StatusId} />
+                </div>
+
+                {/* 経過時間 */}
+                <div className="flex-1 min-w-0">
+                  <span className={`text-sm font-bold ${
+                    f.hoursElapsed >= 72  ? "text-red-600"    :
+                    f.hoursElapsed >= 48  ? "text-orange-500" :
+                    "text-amber-500"
+                  }`}>
+                    {f.hoursElapsed}h 経過
+                  </span>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    最終送信: {f.lastSentAt.slice(0, 16).replace("T", " ")}
+                  </p>
+                </div>
+
+                {/* フォローボタン */}
+                <Link
+                  href={`/customers/${f.id}`}
+                  className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium text-amber-700 border border-amber-200 bg-amber-50 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors"
+                >
+                  フォロー →
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ════════════════════════════════════════════════
+          既存: KPI / 売上分析 / ABテスト etc.
+          ════════════════════════════════════════════════ */}
 
       {/* ── KPI カード ──────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">

@@ -3,6 +3,7 @@
 
 import { getDb } from "./db";
 import { calculateCustomerScore } from "./customerScore";
+import { getRecommendedTemplates } from "./recommendTemplates";
 import { getStatus } from "./statuses";
 import type { StatusId } from "./statuses";
 
@@ -159,6 +160,7 @@ export type ChaseQueueItem = {
   temperature:  string;
   hoursElapsed: number | null;
   priority:     number;     // ソート用合成スコア
+  bestTemplate: string | null; // 最適送信ボタン用・事前選択済みテンプレ本文（名前差し込み済み）
 };
 
 export function getChaseQueue(limit = 20): ChaseQueueItem[] {
@@ -171,6 +173,7 @@ export function getChaseQueue(limit = 20): ChaseQueueItem[] {
         c.display_name,
         c.status,
         c.temperature,
+        c.category,
         c.line_user_id,
         c.next_action,
         c.tags,
@@ -202,7 +205,8 @@ export function getChaseQueue(limit = 20): ChaseQueueItem[] {
         AND c.line_user_id IS NOT NULL
     `).all() as Array<{
       id: number; name: string; display_name: string | null;
-      status: string; temperature: string; line_user_id: string | null;
+      status: string; temperature: string; category: string | null;
+      line_user_id: string | null;
       next_action: string | null; tags: string; updated_at: string;
       last_sent_at: string | null; hours_elapsed: number | null;
       has_reply: number;
@@ -251,10 +255,29 @@ export function getChaseQueue(limit = 20): ChaseQueueItem[] {
         if (noNextAction) priority += 10;
         if (isLineNew)    priority += 5;
 
+        // 最適テンプレートを1件選択して名前を差し込む
+        const displayName = r.display_name ?? r.name;
+        const recommended = getRecommendedTemplates(
+          {
+            category:    r.category ?? undefined,
+            status:      r.status,
+            tags,
+            temperature: r.temperature,
+            line_user_id: r.line_user_id ?? undefined,
+          },
+          1,
+        );
+        const rawBody = recommended[0]?.body ?? null;
+        const bestTemplate = rawBody
+          ? (rawBody.includes(displayName) || rawBody.startsWith("さん")
+              ? rawBody
+              : `${displayName}さん、\n${rawBody}`)
+          : null;
+
         return {
           id:           r.id,
           name:         r.name,
-          display_name: r.display_name ?? r.name,
+          display_name: displayName,
           score,
           scoreLabel:   label,
           scoreReasons: reasons,
@@ -265,6 +288,7 @@ export function getChaseQueue(limit = 20): ChaseQueueItem[] {
           temperature:  r.temperature,
           hoursElapsed: r.hours_elapsed,
           priority,
+          bestTemplate,
         } satisfies ChaseQueueItem;
       })
       .filter((item): item is ChaseQueueItem => item !== null)

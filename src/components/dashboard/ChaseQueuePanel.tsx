@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ChaseQueueItem } from "@/lib/dashboard";
 import { SCORE_LABEL_STYLE } from "@/lib/customerScore";
+import { saveCustomerMessageDraft } from "@/lib/messageDraft";
 
 // localStorage キー: 日付ごとに分離 → 翌日自動リセット
 const DONE_KEY_PREFIX = "crm_chase_done_";
@@ -49,6 +51,7 @@ type Props = {
 };
 
 export function ChaseQueuePanel({ items }: Props) {
+  const router = useRouter();
   const [doneIds, setDoneIds] = useState<Set<number>>(new Set());
   const [mounted, setMounted] = useState(false);
 
@@ -62,6 +65,14 @@ export function ChaseQueuePanel({ items }: Props) {
     next.add(id);
     setDoneIds(next);
     saveDoneIds(next);
+  };
+
+  // テンプレをdraftに書き込んで詳細画面へ遷移（textareaに自動セットされる）
+  const handleQuickSend = (item: ChaseQueueItem) => {
+    if (item.bestTemplate) {
+      saveCustomerMessageDraft(item.id, item.bestTemplate);
+    }
+    router.push(`/customers/${item.id}`);
   };
 
   const visible   = mounted ? items.filter((item) => !doneIds.has(item.id)) : items;
@@ -163,9 +174,17 @@ export function ChaseQueuePanel({ items }: Props) {
                 >
                   対応済み
                 </button>
+                {/* 最適送信: テンプレをdraftに書き込んで詳細画面へ */}
+                <button
+                  onClick={() => handleQuickSend(item)}
+                  className="text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-brand-600 px-3 py-1.5 rounded-lg hover:from-violet-700 hover:to-brand-700 transition-all shadow-sm"
+                  title={item.bestTemplate ?? "詳細画面へ移動"}
+                >
+                  最適送信
+                </button>
                 <Link
                   href={`/customers/${item.id}`}
-                  className="text-xs font-semibold text-white bg-brand-600 px-3 py-1.5 rounded-lg hover:bg-brand-700 transition-colors"
+                  className="text-xs font-medium text-brand-600 border border-brand-200 px-2.5 py-1.5 rounded-lg hover:bg-brand-50 transition-colors"
                 >
                   詳細へ
                 </Link>
